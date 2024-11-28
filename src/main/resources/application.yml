@@ -1,0 +1,9 @@
+server:
+  port: 9863
+
+logging:
+  level:
+    com:
+      widdit:
+        service: info
+        controller: info
