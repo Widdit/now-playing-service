@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "v73ATwpr2S4=",
+  "dgSpecHash": "ijqX27StCyc=",
   "success": true,
-  "projectFilePath": "D:\\IdeaProjects\\NowPlaying\\external_tools\\GetMusicStatus\\GetMusicStatus.csproj",
+  "projectFilePath": "D:\\AutoHotkey\\MyScripts\\NowPlaying\\GetMusicStatus\\1.0.0\\GetMusicStatus\\GetMusicStatus.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Widdit\\.nuget\\packages\\cscore\\1.2.1.2\\cscore.1.2.1.2.nupkg.sha512"
   ],

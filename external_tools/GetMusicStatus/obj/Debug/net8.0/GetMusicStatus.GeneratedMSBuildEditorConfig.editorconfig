@@ -8,6 +8,6 @@ build_property.PlatformNeutralAssembly =
 build_property.EnforceExtendedAnalyzerRules = 
 build_property._SupportedPlatformList = Linux,macOS,Windows
 build_property.RootNamespace = GetMusicStatus
-build_property.ProjectDir = D:\IdeaProjects\NowPlaying\external_tools\GetMusicStatus\
+build_property.ProjectDir = D:\AutoHotkey\MyScripts\NowPlaying\GetMusicStatus\1.0.0\GetMusicStatus\
 build_property.EnableComHosting = 
 build_property.EnableGeneratedComInterfaceComImportInterop = 
