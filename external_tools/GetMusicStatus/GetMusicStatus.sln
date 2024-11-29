@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.002.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GetMusicStatus", "GetMusicStatus.csproj", "{2C120887-5362-402A-AF81-C3AB9D5F9306}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GetMusicStatus", "GetMusicStatus.csproj", "{419E2E5D-64AF-484C-9C83-5F770BBBA0BC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,15 +11,15 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{2C120887-5362-402A-AF81-C3AB9D5F9306}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2C120887-5362-402A-AF81-C3AB9D5F9306}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2C120887-5362-402A-AF81-C3AB9D5F9306}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2C120887-5362-402A-AF81-C3AB9D5F9306}.Release|Any CPU.Build.0 = Release|Any CPU
+		{419E2E5D-64AF-484C-9C83-5F770BBBA0BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{419E2E5D-64AF-484C-9C83-5F770BBBA0BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{419E2E5D-64AF-484C-9C83-5F770BBBA0BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{419E2E5D-64AF-484C-9C83-5F770BBBA0BC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {9DE40473-F439-4391-8B6A-0E4DBD01982C}
+		SolutionGuid = {26426E92-8A5F-4465-A346-564011BC2D19}
 	EndGlobalSection
 EndGlobal

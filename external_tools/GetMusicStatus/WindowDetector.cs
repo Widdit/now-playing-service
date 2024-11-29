@@ -1,31 +1,30 @@
 using System;
 using System.Text;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 public class WindowDetector
 {
-    const int GW_HWNDNEXT = 2;
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
-    static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     [DllImport("user32.dll", SetLastError = true)]
-    static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    private static extern int GetWindowTextLength(IntPtr hWnd);
 
     [DllImport("user32.dll", SetLastError = true)]
-    static extern int GetWindowTextLength(IntPtr hWnd);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    static extern bool IsWindowVisible(IntPtr hWnd);
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
-    delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    public string GetWindowTitle(string processName)
+    public static string GetWindowTitle(string processName)
     {
         string windowTitle = "";
         bool found = false;
@@ -56,5 +55,33 @@ public class WindowDetector
         }, IntPtr.Zero);
 
         return windowTitle;
+    }
+
+    public static List<string> GetWindowTitles(string processName)
+    {
+        List<string> windowTitles = new List<string>();
+        uint targetProcessId = (uint)Process.GetProcessesByName(processName)[0].Id;
+
+        EnumWindows(new EnumWindowsProc((hWnd, lParam) =>
+        {
+            uint pid;
+            GetWindowThreadProcessId(hWnd, out pid);
+
+            if (pid == targetProcessId)
+            {
+                StringBuilder sb = new StringBuilder(256);
+                GetWindowText(hWnd, sb, sb.Capacity);
+                string title = sb.ToString();
+
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    windowTitles.Add(title);
+                }
+            }
+
+            return true;  // Continue enumerating
+        }), IntPtr.Zero);
+
+        return windowTitles;
     }
 }

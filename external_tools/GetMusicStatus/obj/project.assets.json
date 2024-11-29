@@ -44,11 +44,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\IdeaProjects\\NowPlaying\\external_tools\\GetMusicStatus\\GetMusicStatus.csproj",
+      "projectUniqueName": "D:\\AutoHotkey\\MyScripts\\NowPlaying\\GetMusicStatus\\1.0.0\\GetMusicStatus\\GetMusicStatus.csproj",
       "projectName": "GetMusicStatus",
-      "projectPath": "D:\\IdeaProjects\\NowPlaying\\external_tools\\GetMusicStatus\\GetMusicStatus.csproj",
+      "projectPath": "D:\\AutoHotkey\\MyScripts\\NowPlaying\\GetMusicStatus\\1.0.0\\GetMusicStatus\\GetMusicStatus.csproj",
       "packagesPath": "C:\\Users\\Widdit\\.nuget\\packages\\",
-      "outputPath": "D:\\IdeaProjects\\NowPlaying\\external_tools\\GetMusicStatus\\obj\\",
+      "outputPath": "D:\\AutoHotkey\\MyScripts\\NowPlaying\\GetMusicStatus\\1.0.0\\GetMusicStatus\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
