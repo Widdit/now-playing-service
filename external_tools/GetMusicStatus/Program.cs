@@ -121,10 +121,12 @@ class Program
         }
         
 
-        // 如果开启了桌面歌词，那么主窗口标题就不是歌曲信息了，需要遍历该进程的所有窗口来获取真正的歌曲信息
+        // 这段代码处理两种特殊情况：
+        // 1. 如果开启了桌面歌词，那么主窗口标题就不是歌曲信息了，需要遍历该进程的所有窗口来获取真正的歌曲信息
+        // 2. 如果音乐软件最小化到托盘，那么主窗口标题会变为空，需要遍历该进程的所有窗口来获取有效窗口标题
         try
         {
-            if (windowTitles[targetIndex].Contains("桌面歌词"))
+            if (windowTitles[targetIndex].Contains("桌面歌词") || string.IsNullOrEmpty(windowTitles[targetIndex]))
             {
                 windowTitles[targetIndex] = "";
 
@@ -150,7 +152,7 @@ class Program
             return;
         }
 
-        // 这种情况说明音乐软件的窗口被隐藏到后台，当作未开启处理
+        // 如果窗口标题为空（说明没成功获取到），则返回 None
         if (string.IsNullOrEmpty(windowTitles[targetIndex]))
         {
             Console.WriteLine("None");
