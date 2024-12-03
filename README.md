@@ -38,7 +38,7 @@ QQ 交流群：150453391
    - 信息日志在 info.log 里查看，错误日志在 error.log 里查看
 5. 浏览器访问 `http://localhost:9863`，当看到页面上显示 "NowPlaying Service is Running" 就说明程序运行成功
 
-**注意事项：**如果你用网易云听歌，电脑上已经安装过 Java 环境，并且 JDK 版本 > 14，那么你需要使用旧版本 Java 来运行该程序（[点击查看操作步骤](https://www.kdocs.cn/l/cmfQeMoUD87z)）
+【注意事项】如果你用网易云听歌，电脑上已经安装过 Java 环境，并且 JDK 版本 > 14，那么你需要使用旧版本 Java 来运行该程序（[点击查看操作步骤](https://www.kdocs.cn/l/cmfQeMoUD87z)）
 
 
 
