@@ -4,6 +4,8 @@
 
 QQ 交流群：150453391
 
+![](/images/now playing release banner.png)
+
 
 
 ## 功能特性
