@@ -26,15 +26,17 @@ QQ 交流群：150453391
 
 ## 如何安装
 
-1. 安装 JDK 或 JRE（版本 ≥ 1.8 即可。但如果你使用网易云，JDK 版本不要大于 11）
+1. 安装 JDK 或 JRE（版本 ≥ 1.8 即可）
    - 如果你从未安装过 Java 环境，可前往 [Java 官网](https://www.java.com/zh-CN/) 进行下载
    - 安装好后需配置 JAVA_HOME 和 Path 环境变量：[教程](https://www.bilibili.com/video/BV1uJ411k7wy?p=9)
 2. 前往 [Release](https://github.com/Widdit/now-playing-service/releases) 页面下载最新版本的 ZIP 压缩包
 3. 将压缩包解压至任意目录，例如 D 盘根目录
 4. 此时双击 `NowPlayingService.exe` 即可启动程序
    - 请不要关闭控制台（黑窗口），关闭它就意味着结束程序
-   - 输出日志在 info.log 里查看，错误日志在 error.log 里查看
+   - 信息日志在 info.log 里查看，错误日志在 error.log 里查看
 5. 浏览器访问 `http://localhost:9863`，当看到页面上显示 "NowPlaying Service is Running" 就说明程序运行成功
+
+**注意事项：**如果你用网易云听歌，电脑上已经安装过 Java 环境，并且 JDK 版本 > 14，那么你需要使用旧版本 Java 来运行该程序（[点击查看操作步骤](https://www.kdocs.cn/l/cmfQeMoUD87z)）
 
 
 
