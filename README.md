@@ -4,7 +4,7 @@
 
 QQ 交流群：150453391
 
-![](/images/now playing release banner.png)
+![](/images/now_playing_release_banner.png)
 
 
 
