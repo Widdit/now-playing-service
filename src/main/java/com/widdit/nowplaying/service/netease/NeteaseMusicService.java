@@ -76,6 +76,8 @@ public class NeteaseMusicService {
                 .inLibrary(false)
                 .build();
 
+        track.setCover(getCover(id));
+
         log.info("获取成功");
 
         return track;
@@ -86,7 +88,7 @@ public class NeteaseMusicService {
      * @param id 歌曲 id
      * @return
      */
-    public String getCover(String id) throws IOException {
+    private String getCover(String id) throws IOException {
         log.info("获取网易云音乐歌曲封面..");
 
         // 封装请求参数对象
