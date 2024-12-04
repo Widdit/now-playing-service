@@ -76,9 +76,9 @@ public class NeteaseMusicService {
                 .inLibrary(false)
                 .build();
 
-        track.setCover(getCover(id));
-
         log.info("获取成功");
+
+        track.setCover(getCover(id));
 
         return track;
     }

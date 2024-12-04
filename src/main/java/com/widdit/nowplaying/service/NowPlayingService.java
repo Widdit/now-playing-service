@@ -161,15 +161,26 @@ public class NowPlayingService {
     private void increaseSeekbar() {
         Integer progressSec = player.getSeekbarCurrentPosition();
         Integer duration = track.getDuration();
+
         if (duration == 0) {  // 防止未知异常情况，不要除以 0 就行
             duration = 5 * 60;
         }
-        if (progressSec < 999 * 60) {  // 限制 999 分钟
-            progressSec++;
-            player.setSeekbarCurrentPosition(progressSec);
-            player.setSeekbarCurrentPositionHuman(TimeUtil.getFormattedDuration(progressSec));
-            player.setStatePercent((double) progressSec / duration);
+
+        if (progressSec >= 999 * 60) {  // 限制 999 分钟
+            return;
         }
+
+        if (progressSec >= duration) {
+            player.setSeekbarCurrentPosition(0);
+            player.setSeekbarCurrentPositionHuman("0:00");
+            player.setStatePercent(0.0);
+            return;
+        }
+
+        progressSec++;
+        player.setSeekbarCurrentPosition(progressSec);
+        player.setSeekbarCurrentPositionHuman(TimeUtil.getFormattedDuration(progressSec));
+        player.setStatePercent((double) progressSec / duration);
     }
 
 }
