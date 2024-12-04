@@ -121,8 +121,6 @@ public class NowPlayingService {
             try {
                 if ("Netease".equals(platform)) {
                     track = neteaseMusicService.search(windowTitle);
-                    String cover = neteaseMusicService.getCover(track.getId());
-                    track.setCover(cover);
                 } else if ("QQ".equals(platform)) {
                     track = qqMusicService.search(windowTitle);
                 } else if ("KuGou".equals(platform)) {
