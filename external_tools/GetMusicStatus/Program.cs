@@ -29,52 +29,75 @@ class Program
 
         try
         {
-            // 获取默认音频会话管理器
-            AudioSessionManager2 sessionManager = GetDefaultAudioSessionManager2(DataFlow.Render);
-            AudioSessionEnumerator sessionEnumerator = sessionManager.GetSessionEnumerator();
+            // 获取所有音频设备的音频会话管理器
+            List<AudioSessionManager2> sessionManagers = GetAllAudioSessionManager2(DataFlow.Render);
 
-            AudioSessionControl2 sessionControl = null;
-
-            // 遍历所有会话，寻找匹配的进程
-            foreach (AudioSessionControl session in sessionEnumerator)
+            foreach (AudioSessionManager2 sessionManager in sessionManagers)
             {
-                sessionControl = session.QueryInterface<AudioSessionControl2>();
-                string processName = sessionControl.Process.ProcessName;
-                string windowTitle = sessionControl.Process.MainWindowTitle;
+                if (sessionManager == null)
+                {
+                    continue;
+                }
 
-                // 一个音乐软件可能有多个进程，为避免部分进程不发出声音而造成误判，因此对音量进行累加
-                if (processName.StartsWith("cloudmusic"))  // 网易云音乐
+                AudioSessionEnumerator sessionEnumerator = sessionManager.GetSessionEnumerator();
+                if (sessionEnumerator == null)
                 {
-                    musicAppRunning[0] = true;
-                    volume[0] += session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains('-') || windowTitle.Contains("桌面歌词")))
-                    {
-                        windowTitles[0] = windowTitle;
-                    }
+                    continue;
                 }
-                else if (processName.StartsWith("QQMusic"))  // QQ音乐
+
+                AudioSessionControl2 sessionControl;
+
+                // 遍历所有会话，寻找匹配的进程
+                foreach (AudioSessionControl session in sessionEnumerator)
                 {
-                    musicAppRunning[1] = true;
-                    volume[1] += session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains('-') || windowTitle.Contains("桌面歌词")))
+                    if (session == null)
                     {
-                        windowTitles[1] = windowTitle;
+                        continue;
                     }
-                }
-                else if (processName.StartsWith("KuGou"))  // 酷狗音乐
-                {
-                    musicAppRunning[2] = true;
-                    volume[2] += session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains('-') || windowTitle.Contains("桌面歌词")))
+
+                    sessionControl = session.QueryInterface<AudioSessionControl2>();
+                    if (sessionControl == null || sessionControl.Process == null)
                     {
-                        windowTitles[2] = windowTitle.Contains("桌面歌词") ? windowTitle : fixTitleKuGou(windowTitle);
+                        continue;
                     }
-                }
-                else if (processName.StartsWith("KwService"))  // 酷我音乐
-                {
-                    musicAppRunning[3] = true;
-                    volume[3] += session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    // 酷我音乐的有窗口标题的进程和发出声音的进程不是同一个，需另行获取
+                    
+                    string processName = sessionControl.Process.ProcessName;
+                    string windowTitle = sessionControl.Process.MainWindowTitle;
+
+                    // 一个音乐软件可能有多个进程，为避免部分进程不发出声音而造成误判，因此对音量进行累加
+                    if (processName.StartsWith("cloudmusic"))  // 网易云音乐
+                    {
+                        musicAppRunning[0] = true;
+                        volume[0] += session.QueryInterface<AudioMeterInformation>().PeakValue;
+                        if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains('-') || windowTitle.Contains("桌面歌词")))
+                        {
+                            windowTitles[0] = windowTitle;
+                        }
+                    }
+                    else if (processName.StartsWith("QQMusic"))  // QQ音乐
+                    {
+                        musicAppRunning[1] = true;
+                        volume[1] += session.QueryInterface<AudioMeterInformation>().PeakValue;
+                        if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains('-') || windowTitle.Contains("桌面歌词")))
+                        {
+                            windowTitles[1] = windowTitle;
+                        }
+                    }
+                    else if (processName.StartsWith("KuGou"))  // 酷狗音乐
+                    {
+                        musicAppRunning[2] = true;
+                        volume[2] += session.QueryInterface<AudioMeterInformation>().PeakValue;
+                        if (!string.IsNullOrEmpty(windowTitle) && (windowTitle.Contains('-') || windowTitle.Contains("桌面歌词")))
+                        {
+                            windowTitles[2] = windowTitle.Contains("桌面歌词") ? windowTitle : fixTitleKuGou(windowTitle);
+                        }
+                    }
+                    else if (processName.StartsWith("KwService"))  // 酷我音乐
+                    {
+                        musicAppRunning[3] = true;
+                        volume[3] += session.QueryInterface<AudioMeterInformation>().PeakValue;
+                        // 酷我音乐的有窗口标题的进程和发出声音的进程不是同一个，需另行获取
+                    }
                 }
             }
         }
@@ -256,15 +279,38 @@ class Program
         return windowTitle;
     }
 
+    /*
+        获取默认音频设备的音频会话管理器
+    */
     static AudioSessionManager2 GetDefaultAudioSessionManager2(DataFlow dataFlow)
     {
         using (var enumerator = new MMDeviceEnumerator())
         {
             using (var device = enumerator.GetDefaultAudioEndpoint(dataFlow, Role.Multimedia))
             {
+                // Console.WriteLine("默认音频设备为：" + device.FriendlyName);
                 var sessionManager = AudioSessionManager2.FromMMDevice(device);
                 return sessionManager;
             }
         }
+    }
+
+    /*
+        获取所有音频设备的音频会话管理器
+    */
+    static List<AudioSessionManager2> GetAllAudioSessionManager2(DataFlow dataFlow)
+    {
+        var sessionManagers = new List<AudioSessionManager2>();
+
+        var enumerator = new MMDeviceEnumerator();
+        var devices = enumerator.EnumAudioEndpoints(dataFlow, DeviceState.Active);
+        foreach (var device in devices)
+        {
+            // Console.WriteLine("检测到音频设备：" + device.FriendlyName);
+            var sessionManager = AudioSessionManager2.FromMMDevice(device);
+            sessionManagers.Add(sessionManager);
+        }
+
+        return sessionManagers;
     }
 }
