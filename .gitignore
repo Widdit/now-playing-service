@@ -1,0 +1,10 @@
+**/target/
+.idea
+*.iml
+*.class
+*Test.java
+**/test/
+**/installer/
+**/Settings/
+/src/main/resources/static/
+/src/main/resources/templates/
