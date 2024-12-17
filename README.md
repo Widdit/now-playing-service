@@ -11,7 +11,7 @@ QQ 交流群：150453391
 ## 功能特性
 
 - 支持国内四大主流音乐软件（网易云音乐、QQ 音乐、酷狗音乐、酷我音乐）
-- 支持其它平台（Spotify，更多平台还在接入中...）
+- 支持其它平台（Spotify，更多平台正在接入中...）
 - 能够实时检测正在播放的 **歌曲信息** 以及 **进度条信息**
   - 歌曲信息
     - 歌名
@@ -32,12 +32,11 @@ QQ 交流群：150453391
 1. 安装 JDK 或 JRE（版本 ≥ 1.8 即可）
    - 如果你从未安装过 Java 环境，可前往 [Java 官网](https://www.java.com/zh-CN/) 进行下载
    - 安装好后需配置 JAVA_HOME 和 Path 环境变量：[教程](https://www.bilibili.com/video/BV1uJ411k7wy?p=9)
-2. 前往 [Release](https://github.com/Widdit/now-playing-service/releases) 页面下载最新版本的 ZIP 压缩包
-3. 将压缩包解压至任意目录，例如 D 盘根目录
-4. 此时双击 `NowPlayingService.exe` 即可启动程序
+2. 前往 [Release](https://github.com/Widdit/now-playing-service/releases) 页面下载最新版本的 ZIP 压缩包，将压缩包解压至任意目录，例如 D 盘根目录
+3. 此时双击 `NowPlayingService.exe` 即可启动程序
    - 请不要关闭控制台（黑窗口），关闭它就意味着结束程序
    - 信息日志在 info.log 里查看，错误日志在 error.log 里查看
-5. 浏览器访问 `http://localhost:9863`，当看到页面上显示 "NowPlaying Service is Running" 就说明程序运行成功
+4. 浏览器访问 `http://localhost:9863`，当看到页面上显示 "NowPlaying Service is Running" 就说明程序运行成功
 
 【注意事项】如果你用网易云听歌，电脑上已经安装过 Java 环境，并且 JDK 版本 > 14，那么你需要使用旧版本 Java 来运行该程序（[点击查看操作步骤](https://www.kdocs.cn/l/cmfQeMoUD87z)）
 
@@ -45,7 +44,7 @@ QQ 交流群：150453391
 
 ## 如何编译
 
-- 该项目仅包含后端代码
+- 由于版权原因，该项目仅包含后端代码
 - 核心代码使用 Java 编写，使用 IDEA 打开即可
 - 外部程序 `external_programs/AudioService` 的代码使用 C# 编写，使用 Visual Studio 或 VS Code 打开
 
