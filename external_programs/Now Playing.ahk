@@ -59,6 +59,7 @@ Menu, Tray, Add, 主页, MenuHomeHandler
 Menu, Tray, Add, 设置, MenuSettingsHandler
 Menu, Tray, Add, 组件预览, :PreviewMenu
 Menu, Tray, Add  ; 分割线
+Menu, Tray, Add, 重新启动, MenuRestartHandler
 Menu, Tray, Add, 退出, MenuExitHandler
 
 return
@@ -94,10 +95,12 @@ MenuHomeHandler:
 Run, http://localhost:9863
 return
 
+
 ; 托盘菜单 - 设置
 MenuSettingsHandler:
 Run, http://localhost:9863/settings
 return
+
 
 ; 托盘菜单 - 组件预览
 MenuWidgetPreviewHandler:
@@ -122,6 +125,34 @@ else if (A_ThisMenuItem = "配置文件D")
     Run, http://localhost:9863/widget/profileD
 }
 return
+
+
+; 托盘菜单 - 重新启动
+MenuRestartHandler:
+SetTimer, CheckProcess, Off
+Sleep 500
+
+Process, Close, %servicePID%
+Sleep 1000
+Run, NowPlayingService.exe, , Hide, servicePID
+
+; 自动打开主页
+Sleep 1000
+try
+{
+    Run, http://localhost:9863
+}
+catch
+{
+    Clipboard := "http://localhost:9863"
+    MsgBox, 主页打开失败，请手动打开浏览器进入主页！`n（链接已复制到剪贴板）
+}
+
+; 每 2 秒检查 NowPlayingService.exe 是否存在，不存在则退出程序
+SetTimer, CheckProcess, 2000
+
+return
+
 
 ; 托盘菜单 - 退出
 MenuExitHandler:
