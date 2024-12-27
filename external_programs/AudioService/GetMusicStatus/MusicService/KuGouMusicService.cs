@@ -38,7 +38,7 @@ public class KuGouMusicService
 
                 if (processName.StartsWith("KuGou"))
                 {
-                    // 酷狗音乐部分情况下会存在多个进程，因此不能 break
+                    // 酷狗音乐部分情况下会存在多个进程，因此不能 break，并且需要累加音量
                     musicAppRunning = true;
                     volume += session.QueryInterface<AudioMeterInformation>().PeakValue;
 
@@ -70,19 +70,21 @@ public class KuGouMusicService
             return;
         }
 
-        // 这段代码处理两种特殊情况：
-        // 1. 如果开启了桌面歌词，那么主窗口标题就不是歌曲信息了，需要遍历该进程的所有窗口来获取真正的歌曲信息
-        // 2. 如果音乐软件最小化到托盘，那么主窗口标题会变为空，需要遍历该进程的所有窗口来获取有效窗口标题
+        // 这段代码处理三种特殊情况：
+        // 1. 如果音乐软件最小化到托盘，那么主窗口标题会变为空
+        // 2. 如果开启了桌面歌词，那么主窗口标题就不是歌曲信息了
+        // 3. 如果开启了精简模式，那么主窗口标题就不是歌曲信息了
+        // 此时，需要遍历该进程的所有窗口来获取有效窗口标题
         try
         {
-            if (windowTitle.Contains("桌面歌词") || string.IsNullOrEmpty(windowTitle))
+            if (string.IsNullOrEmpty(windowTitle) || !windowTitle.Contains(" - ") || windowTitle.Contains("桌面歌词"))
             {
                 windowTitle = "";
 
                 List<string> allTitles = WindowDetector.GetWindowTitles("KuGou");
                 foreach (string title in allTitles)
                 {
-                    if (!title.Contains("桌面歌词") && title.Contains('-'))
+                    if (title.Contains(" - ") && !title.Contains("桌面歌词"))
                     {
                         windowTitle = FixTitleKuGou(title);
                         break;
@@ -105,7 +107,7 @@ public class KuGouMusicService
 
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
-        Console.WriteLine(status + " " + "KuGou");
+        Console.WriteLine(status);
         Console.WriteLine(windowTitle);
     }
 

@@ -1,11 +1,66 @@
 ﻿#Persistent
 #SingleInstance, Force
+#Include JSON.ahk
 
 
+/*
+    =============================================
+    ****************** 版本信息 ******************
+    =============================================
+*/
+currentVersion := "1.0.5"
+
+
+; 全局变量
 serviceRunning := false  ; NowPlayingService.exe 是否运行中
+
+; 通用设置项
+autoLaunchHomePage := true  ; 是否自动打开主页
+
+; 读取通用设置文件
+settingsFile := FileOpen("Settings/settings.json", "r", "UTF-8")
+if (settingsFile)
+{
+    settingsStr := settingsFile.Read()
+    settingsFile.Close()
+
+    if (InStr(settingsStr, "autoLaunchHomePage"))
+    {
+        settingsObj := JSON.Load(settingsStr)
+        autoLaunchHomePage := settingsObj.autoLaunchHomePage
+    }
+}
 
 ; 软件退出前需执行操作
 OnExit("exitFunc")
+
+; 如果不自动打开主页，则需要检查更新
+if (!autoLaunchHomePage)
+{
+    try
+    {
+        versionStr := GetRequest("https://gitee.com/widdit/now-playing/raw/master/version.json")
+        versionObj := JSON.Load(versionStr)
+        latestVersion := versionObj.latestVersion
+
+        if (VersionCompare(currentVersion, latestVersion) < 0)
+        {
+            updateDate := versionObj.updateDate
+            updateLog := versionObj.updateLog
+
+            MsgBox, 0x31, , 检测到新版本 %latestVersion%，是否前往下载？`n`n发布时间：`n%updateDate%`n`n更新日志：`n%updateLog%
+            IfMsgBox OK
+            {
+                Run, https://gitee.com/widdit/now-playing/releases
+                ExitApp
+            }
+        }
+    }
+    catch
+    {
+        ; Ignored
+    }
+}
 
 ; 检测系统 Java 运行环境
 EnvGet, javaHome, JAVA_HOME
@@ -14,7 +69,6 @@ if (javaHome = "")
     MsgBox, 0x10, , JAVA_HOME 环境变量未配置！`n如果您已配置，重启电脑后生效
     ExitApp
 }
-
 javaExePath := javaHome . "\bin\java.exe"
 if (!FileExist(javaExePath))
 {
@@ -31,16 +85,12 @@ if (!FileExist("NowPlayingService.exe"))
 Run, NowPlayingService.exe, , Hide, servicePID
 serviceRunning := true
 
-; 自动打开主页
 Sleep 1000
-try
+
+; 自动打开主页
+if (autoLaunchHomePage)
 {
     Run, http://localhost:9863
-}
-catch
-{
-    Clipboard := "http://localhost:9863"
-    MsgBox, 主页打开失败，请手动打开浏览器进入主页！`n（链接已复制到剪贴板）
 }
 
 ; 每 2 秒检查 NowPlayingService.exe 是否存在，不存在则退出程序
@@ -90,6 +140,45 @@ exitFunc()
 }
 
 
+; 发送 GET 请求，返回响应字符串
+GetRequest(url)
+{
+    whr := ComObjCreate("WinHttp.WinHttpRequest.5.1")
+    whr.Open("GET", url, true)
+    whr.Send()
+    whr.WaitForResponse()
+
+    arr := whr.responseBody
+    pData := NumGet(ComObjValue(arr) + 8 + A_PtrSize)
+    length := arr.MaxIndex() + 1
+    responseStr := StrGet(pData, length, "utf-8")
+
+    return responseStr
+}
+
+
+; 比较两个版本号（格式形如 1.0.5）。如果 version1 < version2，返回 -1；大于返回 1；相等返回 0
+VersionCompare(version1, version2)
+{
+    version1Array := StrSplit(version1, ".")
+    version2Array := StrSplit(version2, ".")
+
+    Loop, % Max(version1Array.Length(), version2Array.Length())
+    {
+        part1 := (A_Index <= version1Array.Length()) ? version1Array[A_Index] : 0
+        part2 := (A_Index <= version2Array.Length()) ? version2Array[A_Index] : 0
+
+        if (part1 < part2) {
+            return -1
+        } else if (part1 > part2) {
+            return 1
+        }
+    }
+
+    return 0
+}
+
+
 ; 托盘菜单 - 主页
 MenuHomeHandler:
 Run, http://localhost:9863
@@ -136,16 +225,12 @@ Process, Close, %servicePID%
 Sleep 1000
 Run, NowPlayingService.exe, , Hide, servicePID
 
-; 自动打开主页
 Sleep 1000
-try
+
+; 自动打开主页
+if (autoLaunchHomePage)
 {
     Run, http://localhost:9863
-}
-catch
-{
-    Clipboard := "http://localhost:9863"
-    MsgBox, 主页打开失败，请手动打开浏览器进入主页！`n（链接已复制到剪贴板）
 }
 
 ; 每 2 秒检查 NowPlayingService.exe 是否存在，不存在则退出程序

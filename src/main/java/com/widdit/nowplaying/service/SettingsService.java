@@ -3,7 +3,10 @@ package com.widdit.nowplaying.service;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.widdit.nowplaying.entity.SettingsGeneral;
+import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.io.FileWriter;
@@ -16,6 +19,9 @@ import java.nio.file.Paths;
 public class SettingsService {
 
     private static SettingsGeneral settingsGeneral;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     /*
      * 初始化：读取本地设置文件
@@ -42,6 +48,9 @@ public class SettingsService {
         writeSettings(settingsGeneral);
 
         log.info("修改通用设置成功");
+
+        // 发布事件，通知变化
+        eventPublisher.publishEvent(new SettingsGeneralChangeEvent(this, "通用设置被修改"));
     }
 
     /**

@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class NeteaseMusicService
+public class KuWoMusicService
 {
     public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -36,11 +36,11 @@ public class NeteaseMusicService
 
                 string processName = sessionControl.Process.ProcessName;
 
-                if (processName.StartsWith("cloudmusic"))
+                if (processName.StartsWith("KwService"))
                 {
                     musicAppRunning = true;
                     volume = session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    windowTitle = sessionControl.Process.MainWindowTitle;
+                    // 酷我音乐的有窗口标题的进程和发出声音的进程不是同一个，需另行获取
                     break;
                 }
             }
@@ -58,23 +58,16 @@ public class NeteaseMusicService
             return;
         }
 
-        // 这段代码处理两种特殊情况：
-        // 1. 如果开启了桌面歌词，那么主窗口标题就不是歌曲信息了，需要遍历该进程的所有窗口来获取真正的歌曲信息
-        // 2. 如果音乐软件最小化到托盘，那么主窗口标题会变为空，需要遍历该进程的所有窗口来获取有效窗口标题
+        // 获取酷我音乐的窗口标题
         try
         {
-            if (windowTitle.Contains("桌面歌词") || string.IsNullOrEmpty(windowTitle))
+            List<string> allTitles = WindowDetector.GetWindowTitles("kwmusic");
+            foreach (string title in allTitles)
             {
-                windowTitle = "";
-
-                List<string> allTitles = WindowDetector.GetWindowTitles("cloudmusic");
-                foreach (string title in allTitles)
+                if (title.Contains('-'))
                 {
-                    if (!title.Contains("桌面歌词") && title.Contains('-'))
-                    {
-                        windowTitle = title;
-                        break;
-                    }
+                    windowTitle = FixTitleKuWo(title);
+                    break;
                 }
             }
         }
@@ -93,7 +86,26 @@ public class NeteaseMusicService
 
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
-        Console.WriteLine(status + " " + "Netease");
+        Console.WriteLine(status);
         Console.WriteLine(windowTitle);
+    }
+
+    /*
+        修正酷我音乐标题
+        酷我音乐标题过长会滚动，例如 "nd&Daft Punk-酷我音乐 Starboy -The Week"，需要修正为 "酷我音乐 Starboy -The Weeknd&Daft Punk-"
+    */
+    static string FixTitleKuWo(string windowTitle)
+    {
+        if (!windowTitle.Contains("酷我"))  // 酷我两个字被拆开了
+        {
+            windowTitle = windowTitle.Substring(1) + windowTitle.Substring(0, 1);
+        }
+        int pos = windowTitle.IndexOf("酷我");
+        windowTitle = windowTitle.Substring(pos) + windowTitle.Substring(0, pos);
+
+        // 去除无关信息（"酷我音乐 Starboy -The Weeknd&Daft Punk-" ==> "Starboy -The Weeknd&Daft Punk"）
+        windowTitle = windowTitle.Substring(5, windowTitle.Length - 6);
+
+        return windowTitle;
     }
 }

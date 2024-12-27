@@ -1,5 +1,6 @@
 package com.widdit.nowplaying.controller;
 
+import com.widdit.nowplaying.entity.Link;
 import com.widdit.nowplaying.entity.profile.VersionInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,19 @@ public class VersionController {
         String url = "https://gitee.com/widdit/now-playing/raw/master/version.json";
 
         ResponseEntity<VersionInfo> response = restTemplate.getForEntity(url, VersionInfo.class);
+
+        return response.getBody();
+    }
+
+    /**
+     * 获取 Apple Music 帮助链接
+     * @return
+     */
+    @GetMapping("/appleMusicHelp")
+    public Link getAppleMusicHelp() {
+        String url = "https://gitee.com/widdit/now-playing/raw/master/apple_music_help.json";
+
+        ResponseEntity<Link> response = restTemplate.getForEntity(url, Link.class);
 
         return response.getBody();
     }

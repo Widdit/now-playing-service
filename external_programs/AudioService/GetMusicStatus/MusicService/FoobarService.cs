@@ -1,11 +1,11 @@
 using System;
-using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class SpotifyMusicService
+public class FoobarService
 {
     public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -37,12 +37,12 @@ public class SpotifyMusicService
 
                 string processName = sessionControl.Process.ProcessName;
 
-                if (processName.StartsWith("Spotify"))
+                if (processName.StartsWith("foobar2000"))
                 {
+                    // Foobar2000 部分情况下会存在多个进程，因此不能 break，并且需要累加音量
                     musicAppRunning = true;
-                    volume = session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    windowTitle = FixTitleSpotify(sessionControl.Process.MainWindowTitle);
-                    break;
+                    volume += session.QueryInterface<AudioMeterInformation>().PeakValue;
+                    windowTitle = sessionControl.Process.MainWindowTitle;
                 }
             }
         }
@@ -59,17 +59,20 @@ public class SpotifyMusicService
             return;
         }
 
-        // 如果音乐软件最小化到托盘，那么主窗口标题会变为空，需要遍历该进程的所有窗口来获取有效窗口标题
+        // 如果 Foobar2000 开启了其它窗口，那么主窗口标题就不是歌曲信息了
+        // 此时，需要遍历该进程的所有窗口来获取有效窗口标题
         try
         {
-            if (string.IsNullOrEmpty(windowTitle))
+            if (string.IsNullOrEmpty(windowTitle) || !windowTitle.Contains("foobar2000"))
             {
-                List<string> allTitles = WindowDetector.GetWindowTitles("Spotify");
+                windowTitle = "";
+
+                List<string> allTitles = WindowDetector.GetWindowTitles("foobar2000");
                 foreach (string title in allTitles)
                 {
-                    if (title.Contains('-') || title.StartsWith("Spotify"))
+                    if (title.Contains("foobar2000"))
                     {
-                        windowTitle = FixTitleSpotify(title);
+                        windowTitle = title;
                         break;
                     }
                 }
@@ -88,45 +91,27 @@ public class SpotifyMusicService
             return;
         }
 
-        // Spotify 在暂停音乐时，窗口标题会变成 "Spotify Free"（也可能是 "Premium"），因此需要对窗口标题进行缓存
-        string cachePath = "spotify_title.cache";
-        if (windowTitle.Contains('-'))
-        {
-            // 写入缓存
-            File.WriteAllText(cachePath, windowTitle, Encoding.UTF8);
-        }
-        else
-        {
-            // 读取缓存
-            if (File.Exists(cachePath))
-            {
-                windowTitle = File.ReadAllText(cachePath, Encoding.UTF8).Trim();
-            }
-            else
-            {
-                Console.WriteLine("None");
-                return;
-            }
-        }
+        // 修正窗口标题
+        windowTitle = FixTitleFoobar(windowTitle);
 
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
-        Console.WriteLine(status + " " + "Spotify");
+        Console.WriteLine(status);
         Console.WriteLine(windowTitle);
     }
 
     /*
-        修正 Spotify 标题
-        把歌名放前面，歌手放后面
+        修正 Foobar2000 标题
+        "Christopher Cross - [Christopher Cross #08] Sailing  [foobar2000]" → "Christopher Cross - Sailing"
     */
-    static string FixTitleSpotify(string windowTitle)
+    static string FixTitleFoobar(string windowTitle)
     {
-        if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))
-        {
-            string[] split = windowTitle.Split('-');
-            windowTitle = split[1].Trim() + " - " + split[0].Trim();
-        }
+        // 删除所有 [] 的内容
+        windowTitle = Regex.Replace(windowTitle, @"\[[^\]]*\]", "");
 
-        return windowTitle;
+        // 将所有连续的多个空格替换为单个空格
+        windowTitle = Regex.Replace(windowTitle, @"\s+", " ");
+
+        return windowTitle.Trim();
     }
 }

@@ -17,4 +17,6 @@ public class SettingsGeneral {
 
     private String platform = "netease";  // 音乐平台
 
+    private Boolean autoLaunchHomePage = true;  // 启动时自动打开主页
+
 }

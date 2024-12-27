@@ -22,7 +22,7 @@ public class QQMusicService {
      * @return
      */
     public Track search(String keyword) throws IOException {
-        log.info("获取QQ音乐歌曲信息..");
+        log.info("获取 QQ 音乐歌曲信息..");
 
         String url = "http://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=" + keyword + "&p=1&n=2&cr=1";
 
@@ -38,7 +38,7 @@ public class QQMusicService {
 
         // 检查响应数据的 code
         if (!jsonObject.containsKey("code") || jsonObject.getIntValue("code") != 0) {
-            throw new RuntimeException("QQ音乐歌曲信息获取失败");
+            throw new RuntimeException("QQ 音乐歌曲信息获取失败");
         }
 
         // 提取所需字段

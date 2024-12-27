@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class KuWoMusicService
+public class PotPlayerService
 {
     public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -13,6 +13,7 @@ public class KuWoMusicService
         double volume = 0;
         bool musicAppRunning = false;
         string windowTitle = "";
+        string procName = "";
 
         try
         {
@@ -36,11 +37,12 @@ public class KuWoMusicService
 
                 string processName = sessionControl.Process.ProcessName;
 
-                if (processName.StartsWith("KwService"))
+                if (processName.StartsWith("PotPlayer"))
                 {
                     musicAppRunning = true;
                     volume = session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    // 酷我音乐的有窗口标题的进程和发出声音的进程不是同一个，需另行获取
+                    windowTitle = sessionControl.Process.MainWindowTitle;
+                    procName = processName;
                     break;
                 }
             }
@@ -58,16 +60,22 @@ public class KuWoMusicService
             return;
         }
 
-        // 由于酷我音乐的 KwService 进程会常驻，因此需要检查酷我音乐的窗口是否真正开启
+        // 如果 PotPlayer 开启了其它窗口，那么主窗口标题就不是歌曲信息了
+        // 此时，需要遍历该进程的所有窗口来获取有效窗口标题
         try
         {
-            List<string> allTitles = WindowDetector.GetWindowTitles("kwmusic");
-            foreach (string title in allTitles)
+            if (string.IsNullOrEmpty(windowTitle) || !windowTitle.Contains('.'))
             {
-                if (title.Contains('-'))
+                windowTitle = "";
+
+                List<string> allTitles = WindowDetector.GetWindowTitles(procName);
+                foreach (string title in allTitles)
                 {
-                    windowTitle = FixTitleKuWo(title);
-                    break;
+                    if (title.Contains('.'))  // 出现了点就说明有文件扩展名，通过这个来判断出有效窗口标题
+                    {
+                        windowTitle = title;
+                        break;
+                    }
                 }
             }
         }
@@ -84,28 +92,28 @@ public class KuWoMusicService
             return;
         }
 
+        // 修正窗口标题
+        windowTitle = FixTitlePotPlayer(windowTitle);
+
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
-        Console.WriteLine(status + " " + "KuWo");
+        Console.WriteLine(status);
         Console.WriteLine(windowTitle);
     }
 
     /*
-        修正酷我音乐标题
-        酷我音乐标题过长会滚动，例如 "nd&Daft Punk-酷我音乐 Starboy -The Week"，需要修正为 "酷我音乐 Starboy -The Weeknd&Daft Punk-"
+        修正 PotPlayer 标题
+        "Christopher Cross - Sailing.flac - PotPlayer" → "Christopher Cross - Sailing"
     */
-    static string FixTitleKuWo(string windowTitle)
+    static string FixTitlePotPlayer(string windowTitle)
     {
-        if (!windowTitle.Contains("酷我"))  // 酷我两个字被拆开了
+        int lastDotIndex = windowTitle.LastIndexOf('.');
+
+        if (lastDotIndex != -1)
         {
-            windowTitle = windowTitle.Substring(1) + windowTitle.Substring(0, 1);
+            windowTitle = windowTitle.Substring(0, lastDotIndex);
         }
-        int pos = windowTitle.IndexOf("酷我");
-        windowTitle = windowTitle.Substring(pos) + windowTitle.Substring(0, pos);
 
-        // 去除无关信息（"酷我音乐 Starboy -The Weeknd&Daft Punk-" ==> "Starboy -The Weeknd&Daft Punk"）
-        windowTitle = windowTitle.Substring(5, windowTitle.Length - 6);
-
-        return windowTitle;
+        return windowTitle.Trim();
     }
 }

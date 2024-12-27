@@ -1,10 +1,14 @@
 using System;
+using System.IO;
 using System.Text;
 using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class QQMusicService
+/*
+    注意 Apple Music 并不能直接获取到歌曲信息，此处通过 Cider（一个能听 Apple Music 的客户端）来获取歌曲信息
+*/
+public class AppleMusicService
 {
     public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -12,7 +16,6 @@ public class QQMusicService
 
         double volume = 0;
         bool musicAppRunning = false;
-        string windowTitle = "";
 
         try
         {
@@ -36,11 +39,10 @@ public class QQMusicService
 
                 string processName = sessionControl.Process.ProcessName;
 
-                if (processName.StartsWith("QQMusic"))
+                if (processName.StartsWith("Cider"))
                 {
                     musicAppRunning = true;
                     volume = session.QueryInterface<AudioMeterInformation>().PeakValue;
-                    windowTitle = sessionControl.Process.MainWindowTitle;
                     break;
                 }
             }
@@ -58,34 +60,16 @@ public class QQMusicService
             return;
         }
 
-        // 这段代码处理两种特殊情况：
-        // 1. 如果开启了桌面歌词，那么主窗口标题就不是歌曲信息了，需要遍历该进程的所有窗口来获取真正的歌曲信息
-        // 2. 如果音乐软件最小化到托盘，那么主窗口标题会变为空，需要遍历该进程的所有窗口来获取有效窗口标题
-        try
-        {
-            if (windowTitle.Contains("桌面歌词") || string.IsNullOrEmpty(windowTitle))
-            {
-                windowTitle = "";
+        string title = "";
+        string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string filePath = Path.Combine(appDataPath, "Cider", "Plugins", "title.txt");
 
-                List<string> allTitles = WindowDetector.GetWindowTitles("QQMusic");
-                foreach (string title in allTitles)
-                {
-                    if (!title.Contains("桌面歌词") && title.Contains('-'))
-                    {
-                        windowTitle = title;
-                        break;
-                    }
-                }
-            }
-        }
-        catch (Exception)
+        if (File.Exists(filePath))
         {
-            Console.WriteLine("None");
-            return;
+            title = File.ReadAllText(filePath, Encoding.UTF8).Trim();
         }
 
-        // 如果窗口标题为空（说明没成功获取到），则返回 None
-        if (string.IsNullOrEmpty(windowTitle))
+        if (string.IsNullOrEmpty(title))
         {
             Console.WriteLine("None");
             return;
@@ -93,7 +77,7 @@ public class QQMusicService
 
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
-        Console.WriteLine(status + " " + "QQ");
-        Console.WriteLine(windowTitle);
+        Console.WriteLine(status);
+        Console.WriteLine(title);
     }
 }

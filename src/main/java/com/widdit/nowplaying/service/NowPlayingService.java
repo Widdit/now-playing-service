@@ -4,6 +4,7 @@ import com.widdit.nowplaying.entity.Player;
 import com.widdit.nowplaying.entity.Query;
 import com.widdit.nowplaying.entity.SettingsGeneral;
 import com.widdit.nowplaying.entity.Track;
+import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
 import com.widdit.nowplaying.service.kugou.KuGouMusicService;
 import com.widdit.nowplaying.service.kuwo.KuWoMusicService;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
@@ -11,8 +12,15 @@ import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.TimeUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+
+import javax.annotation.PostConstruct;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @Slf4j
@@ -29,8 +37,9 @@ public class NowPlayingService {
     private String prevStatus = "None";
     // 状态转为 None 时的时间戳（毫秒）
     private long noneOccursTime = 0;
-    // 前一秒的通用设置
-    private SettingsGeneral prevSettings = null;
+
+    private Map<String, String> otherPlatforms = new HashMap<>();
+    private Set<String> localPlayers = new HashSet<>();
 
     @Autowired
     private AudioService audioService;
@@ -46,7 +55,7 @@ public class NowPlayingService {
     private KuWoMusicService kuWoMusicService;
 
     /**
-     * 返回音乐信息
+     * 返回歌曲信息
      * @return
      */
     public Query query() {
@@ -59,29 +68,16 @@ public class NowPlayingService {
      */
     @Scheduled(cron = "0/1 * * * * ?")
     public void updateMusicInfo() {
-        // 如果通用设置被修改，则将 prevWindowTitle 清空
-        SettingsGeneral currSettings = settingsService.getSettingsGeneral();
-        if (!currSettings.equals(prevSettings)) {
-            player = new Player();
-            track = new Track();
-            prevWindowTitle = "";
-            prevSettings = currSettings;
-            return;
-        }
+        SettingsGeneral settings = settingsService.getSettingsGeneral();
 
         // 获取音乐状态
-        String[] lines = audioService.getMusicStatus().split("\n");
-        String musicStatus = lines[0];
-        String windowTitle = "";
-        if (lines.length > 1) {
-            windowTitle = lines[1];
-        }
+        String status = audioService.getStatus();
+        String windowTitle = audioService.getWindowTitle();
 
-        // 在暂停、切歌时，由于系统 IO 调度原因，有概率会出现明明开启了音乐软件但检测结果为 None 的误判情况
-        // 为了解决该问题，要求连续 10 秒以上都为 None 才认为是真正关闭了音乐软件
-        if ("None".equals(musicStatus)) {
+        // 为防止误判，要求连续 6 秒以上都为 None 才认为是真正关闭了音乐软件
+        if ("None".equals(status)) {
             if ("None".equals(prevStatus)) {
-                if (System.currentTimeMillis() - noneOccursTime > 10 * 1000) {
+                if (System.currentTimeMillis() - noneOccursTime > 6 * 1000) {
                     // 此时认为音乐软件真正被关闭了
                     player = new Player();
                     track = new Track();
@@ -95,22 +91,11 @@ public class NowPlayingService {
                 // 这种情况下乐观地认为音乐软件依然存在，更新进度条
                 increaseSeekbar();
             }
-            prevStatus = musicStatus;
-            return;
-        }
-
-        // 当前没有检测到音乐软件
-        if ("".equals(musicStatus) || "".equals(windowTitle)) {
-            player = new Player();
-            track = new Track();
+            prevStatus = status;
             return;
         }
 
         player.setHasSong(true);
-
-        String[] split = musicStatus.split(" ");
-        String status = split[0];
-        String platform = split[1];
 
         if ("Playing".equals(status)) {
             player.setIsPaused(false);
@@ -118,45 +103,50 @@ public class NowPlayingService {
             player.setIsPaused(true);
         }
 
-        if (windowTitle.equals(prevWindowTitle)) {  // 无需查询歌曲信息，因为窗口标题不变（没切歌）
+        if (windowTitle.equals(prevWindowTitle)) {  // 窗口标题不变（没切歌），无需查询歌曲信息
             // 如果是播放状态，则增加进度条秒数
             if ("Playing".equals(status)) {
                 increaseSeekbar();
             }
-        } else {  // 需要查询歌曲信息，因为窗口标题改变（切歌了）
+        } else {  // 窗口标题改变（切歌了），需要查询歌曲信息
             log.info("切换歌曲为：" + windowTitle);
             player.setSeekbarCurrentPosition(0);
             player.setSeekbarCurrentPositionHuman("0:00");
             player.setStatePercent(0.0);
 
-            // 如果是 Spotify，借用网易云音乐搜索
-            if ("Spotify".equals(platform)) {
-                log.info("当前平台为 Spotify，借用网易云音乐搜索");
-                platform = "Netease";
+            String originalPlatform = settings.getPlatform();
+            String platform = originalPlatform;
+
+            // 如果是其它平台，借用网易云音乐搜索
+            if (otherPlatforms.containsKey(originalPlatform)) {
+                log.info("当前平台为：" + otherPlatforms.get(originalPlatform) + "，借用网易云音乐搜索");
+                platform = "netease";
             }
 
             // 网易云没有周杰伦版权，借用 QQ 音乐搜索
-            if ("Netease".equals(platform) && (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫"))) {
+            if ("netease".equals(platform) && (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫"))) {
                 log.info("当前歌手为周杰伦，借用 QQ 音乐搜索");
-                platform = "QQ";
+                platform = "qq";
             }
 
             try {
-                if ("Netease".equals(platform)) {
+                if ("netease".equals(platform)) {
                     track = neteaseMusicService.search(windowTitle);
-                } else if ("QQ".equals(platform)) {
+                } else if ("qq".equals(platform)) {
                     track = qqMusicService.search(windowTitle);
-                } else if ("KuGou".equals(platform)) {
+                } else if ("kugou".equals(platform)) {
                     track = kuGouMusicService.search(windowTitle);
-                } else if ("KuWo".equals(platform)) {
+                } else if ("kuwo".equals(platform)) {
                     track = kuWoMusicService.search(windowTitle);
                 }
 
-                // 小概率情况下会出现搜到的歌并不是实际播放的歌，这时利用窗口标题去更新歌曲信息，确保至少歌名和作者名是正确的
-                if (!windowTitle.contains(track.getAuthor().split("/")[0].trim())) {
-                    String[] titleSplit = windowTitle.split("-");
-                    track.setTitle(titleSplit[0].trim());
-                    track.setAuthor(titleSplit[1].trim());
+                if (!localPlayers.contains(originalPlatform)) {
+                    // 小概率情况下会出现搜到的歌并不是实际播放的歌，这时利用窗口标题去更新歌曲信息，确保至少歌名和作者名是正确的
+                    if (!windowTitle.contains(track.getAuthor().split("/")[0].trim())) {
+                        String[] titleSplit = windowTitle.split("-");
+                        track.setTitle(titleSplit[0].trim());
+                        track.setAuthor(titleSplit[1].trim());
+                    }
                 }
             } catch (Exception e) {
                 log.info("获取失败");
@@ -176,7 +166,34 @@ public class NowPlayingService {
 
         prevWindowTitle = windowTitle;
         prevStatus = status;
-        prevSettings = currSettings;
+    }
+
+    /**
+     * 监听通用设置被修改的事件
+     * @param event
+     */
+    @EventListener
+    public void handleSettingsGeneralChange(SettingsGeneralChangeEvent event) {
+        // 如果通用设置被修改，则将歌曲信息和 prevWindowTitle 清空
+        player = new Player();
+        track = new Track();
+        prevWindowTitle = "";
+    }
+
+    /**
+     * 初始化操作。该方法会在该类被 Spring 创建时自动执行
+     */
+    @PostConstruct
+    public void init() {
+        otherPlatforms.put("spotify", "Spotify");
+        otherPlatforms.put("ayna", "卡西米尔点歌机");
+        otherPlatforms.put("apple", "Apple Music");
+        otherPlatforms.put("potplayer", "PotPlayer");
+        otherPlatforms.put("foobar", "Foobar2000");
+        otherPlatforms.put("lx", "洛雪音乐");
+
+        localPlayers.add("potplayer");
+        localPlayers.add("foobar");
     }
 
     /**
@@ -188,10 +205,6 @@ public class NowPlayingService {
 
         if (duration == 0) {  // 防止未知异常情况，不要除以 0 就行
             duration = 5 * 60;
-        }
-
-        if (progressSec >= 999 * 60) {  // 限制 999 分钟
-            return;
         }
 
         if (progressSec >= duration) {  // 一般发生在单曲循环的情况下
