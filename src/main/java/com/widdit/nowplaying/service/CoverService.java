@@ -54,12 +54,11 @@ public class CoverService {
             base64Img = new Base64Img(result);
 
         } catch (Exception e) {
-            log.error("歌曲封面转码BASE64失败，使用默认封面代替。异常信息：" + e.getMessage());
+            log.error("歌曲封面转码 BASE64 失败，使用默认封面代替。异常信息：" + e.getMessage());
             try {
-                base64Img = new Base64Img(new String(Files.readAllBytes(
-                        Paths.get(ResourceUtils.getFile("classpath:no_cover_base64.txt").toURI()))));
+                base64Img = new Base64Img(new String(Files.readAllBytes(Paths.get("Assets\\no_cover_base64.txt"))));
             } catch (Exception ex) {
-                log.error("默认封面BASE64加载失败：" + e.getMessage());
+                log.error("默认封面 BASE64 加载失败：" + e.getMessage());
             }
 
         } finally {
