@@ -8,7 +8,7 @@
     ****************** 版本信息 ******************
     =============================================
 */
-currentVersion := "1.0.5"
+currentVersion := "1.0.6"
 
 
 ; 全局变量
@@ -62,18 +62,21 @@ if (!autoLaunchHomePage)
     }
 }
 
-; 检测系统 Java 运行环境
-EnvGet, javaHome, JAVA_HOME
-if (javaHome = "")
+; 检测 Java 运行环境
+if (!FileExist("jre") && !FileExist("jre1.8") && !FileExist("jre-1.8") && !FileExist("jdk1.8") && !FileExist("jdk-1.8"))
 {
-    MsgBox, 0x10, , JAVA_HOME 环境变量未配置！`n如果您已配置，重启电脑后生效
-    ExitApp
-}
-javaExePath := javaHome . "\bin\java.exe"
-if (!FileExist(javaExePath))
-{
-    MsgBox, 0x10, , JAVA_HOME 环境变量配置有误，请检查！`nJAVA_HOME: %javaHome%
-    ExitApp
+    EnvGet, javaHome, JAVA_HOME
+    if (javaHome = "")
+    {
+        MsgBox, 0x10, , JAVA_HOME 环境变量未配置！`n如果您已配置，重启电脑后生效
+        ExitApp
+    }
+    javaExePath := javaHome . "\bin\java.exe"
+    if (!FileExist(javaExePath))
+    {
+        MsgBox, 0x10, , JAVA_HOME 环境变量配置有误，请检查！`nJAVA_HOME: %javaHome%
+        ExitApp
+    }
 }
 
 ; 启动 NowPlayingService.exe
@@ -137,6 +140,8 @@ exitFunc()
     {
         Process, Close, %servicePID%
     }
+
+    Process, Close, GetMusicStatus.exe
 }
 
 
@@ -222,6 +227,7 @@ SetTimer, CheckProcess, Off
 Sleep 500
 
 Process, Close, %servicePID%
+Process, Close, GetMusicStatus.exe
 Sleep 1000
 Run, NowPlayingService.exe, , Hide, servicePID
 
