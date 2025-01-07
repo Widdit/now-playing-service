@@ -1,5 +1,6 @@
 package com.widdit.nowplaying.service.netease;
 
+import com.widdit.nowplaying.entity.ReqJsonObject;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.TimeUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,8 @@ import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -25,15 +28,15 @@ public class NeteaseMusicService {
         log.info("获取网易云音乐歌曲信息..");
 
         // 封装请求参数对象
-        UrlParamPair upp = new UrlParamPair();
-        upp.addPara("s", keyword);
-        upp.addPara("type", 1);
-        upp.addPara("offset", 0);
-        upp.addPara("limit", 2);
-        upp.addPara("csrf_token", "");
+        ReqJsonObject reqJsonObject = new ReqJsonObject();
+        reqJsonObject.set("s", keyword);
+        reqJsonObject.set("type", 1);
+        reqJsonObject.set("offset", 0);
+        reqJsonObject.set("limit", 2);
+        reqJsonObject.set("csrf_token", "");
 
         // 发送搜索歌曲请求
-        String respStr = sendPostRequest("https://music.163.com/weapi/search/get", upp);
+        String respStr = sendPostRequest("https://music.163.com/weapi/search/get", reqJsonObject);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
@@ -112,14 +115,14 @@ public class NeteaseMusicService {
         log.info("获取网易云音乐歌曲封面..");
 
         // 封装请求参数对象
-        UrlParamPair upp = new UrlParamPair();
-        upp.addPara("id", id);
-        upp.addPara("c", "[{\"id\":" + id + "}]");
-        upp.addPara("ids", "[" + id + "]");
-        upp.addPara("csrf_token", "");
+        ReqJsonObject reqJsonObject = new ReqJsonObject();
+        reqJsonObject.set("id", id);
+        reqJsonObject.set("c", "[{\"id\":" + id + "}]");
+        reqJsonObject.set("ids", "[" + id + "]");
+        reqJsonObject.set("csrf_token", "");
 
         // 发送搜索歌曲请求
-        String respStr = sendPostRequest("https://music.163.com/weapi/v3/song/detail", upp);
+        String respStr = sendPostRequest("https://music.163.com/weapi/v3/song/detail", reqJsonObject);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
@@ -141,13 +144,10 @@ public class NeteaseMusicService {
     /**
      * 发送 POST 请求
      * @param url 请求 URL
-     * @param upp 请求参数对象
      * @return 响应 JSON 字符串
      * @throws IOException
      */
-    private String sendPostRequest(String url, UrlParamPair upp) throws IOException {
-        String reqStr = upp.getParas().toJSONString();
-
+    private String sendPostRequest(String url, ReqJsonObject reqJsonObject) throws IOException {
         Connection.Response
                 response = Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:57.0) Gecko/20100101 Firefox/57.0")
@@ -159,13 +159,28 @@ public class NeteaseMusicService {
                 .header("DNT", "1")
                 .header("Pragma", "no-cache")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .data(JSSecret.getDatas(reqStr))
+                .data(getSecretData(reqJsonObject))
                 .method(Connection.Method.POST)
                 .ignoreContentType(true)
                 .timeout(10000)
                 .execute();
 
         return response.body();
+    }
+
+    /**
+     * 获取网易云加密参数
+     * @param reqJsonObject 请求参数对象
+     * @return
+     */
+    private Map<String, String> getSecretData(ReqJsonObject reqJsonObject) {
+        String[] encrypt = CryptoUtil.weapiEncrypt(reqJsonObject.toString());
+
+        HashMap<String, String> secretData = new HashMap<>();
+        secretData.put("params", encrypt[0]);
+        secretData.put("encSecKey", encrypt[1]);
+
+        return secretData;
     }
 
 }
