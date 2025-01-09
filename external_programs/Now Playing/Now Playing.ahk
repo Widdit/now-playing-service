@@ -11,9 +11,6 @@
 currentVersion := "1.0.6"
 
 
-; 全局变量
-serviceRunning := false  ; NowPlayingService.exe 是否运行中
-
 ; 通用设置项
 autoLaunchHomePage := true  ; 是否自动打开主页
 
@@ -86,9 +83,17 @@ if (!FileExist("NowPlayingService.exe"))
     ExitApp
 }
 Run, NowPlayingService.exe, , Hide, servicePID
-serviceRunning := true
 
 Sleep 1000
+
+; 检查 NowPlayingService.exe 是否成功启动
+Process, Exist, %servicePID%
+if (ErrorLevel = 0)
+{
+    MsgBox, 0x10, , 该版本程序不兼容！请按照教程安装 32 位补丁
+    Run, https://www.kdocs.cn/l/cujPFHSMXiAJ
+    ExitApp
+}
 
 ; 自动打开主页
 if (autoLaunchHomePage)
@@ -133,14 +138,9 @@ return
 ; 软件退出前需执行操作
 exitFunc()
 {
-    global serviceRunning
     global servicePID
 
-    if (serviceRunning)
-    {
-        Process, Close, %servicePID%
-    }
-
+    Process, Close, %servicePID%
     Process, Close, GetMusicStatus.exe
 }
 
