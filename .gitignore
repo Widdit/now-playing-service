@@ -5,6 +5,7 @@
 *Test.java
 **/test/
 **/installer/
+**/setup/
 **/Settings/
 /src/main/resources/static/
 /src/main/resources/templates/
