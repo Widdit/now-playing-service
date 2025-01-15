@@ -18,9 +18,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 @Service
 @Slf4j
@@ -39,7 +37,6 @@ public class NowPlayingService {
     private long noneOccursTime = 0;
 
     private Map<String, String> otherPlatforms = new HashMap<>();
-    private Set<String> localPlayers = new HashSet<>();
 
     @Autowired
     private AudioService audioService;
@@ -104,7 +101,7 @@ public class NowPlayingService {
         }
 
         if (windowTitle.equals(prevWindowTitle)) {  // 窗口标题不变（没切歌），无需查询歌曲信息
-            // 如果是播放状态，则增加进度条秒数
+            // 如果状态是播放中，则增加进度条秒数
             if ("Playing".equals(status)) {
                 increaseSeekbar();
             }
@@ -114,20 +111,7 @@ public class NowPlayingService {
             player.setSeekbarCurrentPositionHuman("0:00");
             player.setStatePercent(0.0);
 
-            String originalPlatform = settings.getPlatform();
-            String platform = originalPlatform;
-
-            // 如果是其它平台，借用网易云音乐搜索
-            if (otherPlatforms.containsKey(originalPlatform)) {
-                log.info("当前平台为：" + otherPlatforms.get(originalPlatform) + "，借用网易云音乐搜索");
-                platform = "netease";
-            }
-
-            // 网易云没有周杰伦版权，借用 QQ 音乐搜索
-            if ("netease".equals(platform) && (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫"))) {
-                log.info("当前歌手为周杰伦，借用 QQ 音乐搜索");
-                platform = "qq";
-            }
+            String platform = settings.getPlatform();
 
             try {
                 if ("netease".equals(platform)) {
@@ -138,29 +122,35 @@ public class NowPlayingService {
                     track = kuGouMusicService.search(windowTitle);
                 } else if ("kuwo".equals(platform)) {
                     track = kuWoMusicService.search(windowTitle);
-                }
-
-                if (!localPlayers.contains(originalPlatform)) {
-                    // 小概率情况下会出现搜到的歌并不是实际播放的歌，这时利用窗口标题去更新歌曲信息，确保至少歌名和作者名是正确的
-                    if (!windowTitle.contains(track.getAuthor().split("/")[0].trim())) {
-                        String[] titleSplit = windowTitle.split("-");
-                        track.setTitle(titleSplit[0].trim());
-                        track.setAuthor(titleSplit[1].trim());
-                    }
+                } else {
+                    log.info("当前平台为：" + otherPlatforms.get(platform) + "，借用网易云音乐搜索");
+                    track = neteaseMusicService.search(windowTitle);
                 }
             } catch (Exception e) {
                 log.info("获取失败");
-                // 查询歌曲失败，此情况下利用窗口标题去更新歌曲信息
-                String[] titleSplit = windowTitle.split("-");
                 track = Track.builder()
-                        .author(titleSplit[1].trim())
-                        .title(titleSplit[0].trim())
-                        .album(titleSplit[0].trim())
+                        .author("")
+                        .title("")
+                        .album("")
                         .cover("https://gitee.com/widdit/now-playing/raw/master/spotify_no_cover.jpg")
                         .duration(5 * 60)
                         .durationHuman("5:00")
                         .url("https://music.youtube.com/watch?v=dQw4w9WgXcQ")
                         .build();
+            } finally {
+                // 使用窗口标题去覆盖歌曲信息，保证歌名、歌手名和音乐软件中的完全一致
+                if (windowTitle.contains("-")) {
+                    int pos = windowTitle.lastIndexOf("-");
+
+                    String title = windowTitle.substring(0, pos).trim();
+                    String author = windowTitle.substring(pos + 1).trim();
+
+                    track.setTitle(title);
+                    track.setAuthor(author);
+                } else {
+                    track.setTitle(windowTitle);
+                    track.setAuthor("");
+                }
             }
         }
 
@@ -191,9 +181,6 @@ public class NowPlayingService {
         otherPlatforms.put("potplayer", "PotPlayer");
         otherPlatforms.put("foobar", "Foobar2000");
         otherPlatforms.put("lx", "洛雪音乐");
-
-        localPlayers.add("potplayer");
-        localPlayers.add("foobar");
     }
 
     /**
