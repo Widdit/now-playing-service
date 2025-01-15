@@ -159,7 +159,7 @@ public class NeteaseMusicService {
                 .header("DNT", "1")
                 .header("Pragma", "no-cache")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .data(JSSecret.getDatas(reqStr))
+                .data(JSSecret.arithmetic(reqStr))
                 .method(Connection.Method.POST)
                 .ignoreContentType(true)
                 .timeout(10000)
