@@ -32,7 +32,7 @@ public class AudioService {
     private SettingsService settingsService;
 
     /**
-     * 初始化操作。该方法会在该类被 Spring 创建时自动执行
+     * 初始化操作。该方法会在该类实例被 Spring 创建时自动执行
      */
     @PostConstruct
     public void init() {
