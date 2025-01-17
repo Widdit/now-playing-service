@@ -10,9 +10,12 @@
       "GetMusicStatus/1.0.0": {
         "dependencies": {
           "CSCore": "1.2.1.2",
+          "Dubya.WindowsMediaController": "2.5.5",
           "Newtonsoft.Json": "13.0.3",
           "System.CommandLine.DragonFruit": "0.4.0-alpha.22272.1",
-          "runtimepack.Microsoft.NETCore.App.Runtime.win-x64": "8.0.11"
+          "System.Drawing.Common": "9.0.0",
+          "runtimepack.Microsoft.NETCore.App.Runtime.win-x64": "8.0.11",
+          "runtimepack.Microsoft.Windows.SDK.NET.Ref": "10.0.26100.53"
         },
         "runtime": {
           "GetMusicStatus.dll": {}
@@ -738,6 +741,18 @@
           }
         }
       },
+      "runtimepack.Microsoft.Windows.SDK.NET.Ref/10.0.26100.53": {
+        "runtime": {
+          "Microsoft.Windows.SDK.NET.dll": {
+            "assemblyVersion": "10.0.26100.38",
+            "fileVersion": "10.0.26100.52"
+          },
+          "WinRT.Runtime.dll": {
+            "assemblyVersion": "2.1.0.0",
+            "fileVersion": "2.1.6.47881"
+          }
+        }
+      },
       "CSCore/1.2.1.2": {
         "runtime": {
           "lib/net35-client/CSCore.dll": {
@@ -746,7 +761,34 @@
           }
         }
       },
+      "Dubya.WindowsMediaController/2.5.5": {
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "6.0.0"
+        },
+        "runtime": {
+          "lib/net8.0-windows10.0.22621/WindowsMediaController.dll": {
+            "assemblyVersion": "2.5.5.0",
+            "fileVersion": "2.5.5.0"
+          }
+        }
+      },
       "Microsoft.CSharp/4.7.0": {},
+      "Microsoft.Extensions.Logging.Abstractions/6.0.0": {
+        "runtime": {
+          "lib/net6.0/Microsoft.Extensions.Logging.Abstractions.dll": {
+            "assemblyVersion": "6.0.0.0",
+            "fileVersion": "6.0.21.52210"
+          }
+        }
+      },
+      "Microsoft.Win32.SystemEvents/9.0.0": {
+        "runtime": {
+          "runtimes/win/lib/net8.0/Microsoft.Win32.SystemEvents.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
       "Newtonsoft.Json/13.0.3": {
         "runtime": {
           "lib/net6.0/Newtonsoft.Json.dll": {
@@ -839,6 +881,21 @@
             "fileVersion": "0.400.22.27201"
           }
         }
+      },
+      "System.Drawing.Common/9.0.0": {
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "9.0.0"
+        },
+        "runtime": {
+          "lib/net8.0/System.Drawing.Common.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52901"
+          },
+          "lib/net8.0/System.Private.Windows.Core.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52901"
+          }
+        }
       }
     }
   },
@@ -853,6 +910,11 @@
       "serviceable": false,
       "sha512": ""
     },
+    "runtimepack.Microsoft.Windows.SDK.NET.Ref/10.0.26100.53": {
+      "type": "runtimepack",
+      "serviceable": false,
+      "sha512": ""
+    },
     "CSCore/1.2.1.2": {
       "type": "package",
       "serviceable": true,
@@ -860,12 +922,33 @@
       "path": "cscore/1.2.1.2",
       "hashPath": "cscore.1.2.1.2.nupkg.sha512"
     },
+    "Dubya.WindowsMediaController/2.5.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-dcOMe1DUEj5XGHu56jCVoY2zcTLTuvAeI8ICM+CESPPb/HMsmMY4wENZwn1gJTEQF+sIDU/mobA1b/v04cHTYA==",
+      "path": "dubya.windowsmediacontroller/2.5.5",
+      "hashPath": "dubya.windowsmediacontroller.2.5.5.nupkg.sha512"
+    },
     "Microsoft.CSharp/4.7.0": {
       "type": "package",
       "serviceable": true,
       "sha512": "sha512-pTj+D3uJWyN3My70i2Hqo+OXixq3Os2D1nJ2x92FFo6sk8fYS1m1WLNTs0Dc1uPaViH0YvEEwvzddQ7y4rhXmA==",
       "path": "microsoft.csharp/4.7.0",
       "hashPath": "microsoft.csharp.4.7.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Abstractions/6.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-/HggWBbTwy8TgebGSX5DBZ24ndhzi93sHUBDvP1IxbZD7FDokYzdAr6+vbWGjw2XAfR2EJ1sfKUotpjHnFWPxA==",
+      "path": "microsoft.extensions.logging.abstractions/6.0.0",
+      "hashPath": "microsoft.extensions.logging.abstractions.6.0.0.nupkg.sha512"
+    },
+    "Microsoft.Win32.SystemEvents/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-z8FfGIaoeALdD+KF44A2uP8PZIQQtDGiXsOLuN8nohbKhkyKt7zGaZb+fKiCxTuBqG22Q7myIAioSWaIcOOrOw==",
+      "path": "microsoft.win32.systemevents/9.0.0",
+      "hashPath": "microsoft.win32.systemevents.9.0.0.nupkg.sha512"
     },
     "Newtonsoft.Json/13.0.3": {
       "type": "package",
@@ -901,6 +984,13 @@
       "sha512": "sha512-PQd7HStYn6RYjc5zuerR41sALm3qFDutzDHISB5DYbExSgll6s8zghfyYFdLioLPWpFxVyMj3L9Ki69jqqum/g==",
       "path": "system.commandline.rendering/0.4.0-alpha.22272.1",
       "hashPath": "system.commandline.rendering.0.4.0-alpha.22272.1.nupkg.sha512"
+    },
+    "System.Drawing.Common/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-uoozjI3+dlgKh2onFJcz8aNLh6TRCPlLSh8Dbuljc8CdvqXrxHOVysJlrHvlsOCqceqGBR1wrMPxlnzzhynktw==",
+      "path": "system.drawing.common/9.0.0",
+      "hashPath": "system.drawing.common.9.0.0.nupkg.sha512"
     }
   },
   "runtimes": {
