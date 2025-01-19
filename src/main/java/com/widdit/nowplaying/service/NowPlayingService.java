@@ -184,7 +184,7 @@ public class NowPlayingService {
     @PostConstruct
     public void init() {
         otherPlatforms.put("spotify", "Spotify");
-        otherPlatforms.put("ayna", "卡西米尔点歌机");
+        otherPlatforms.put("ayna", "卡西米尔唱片机");
         otherPlatforms.put("apple", "Apple Music");
         otherPlatforms.put("potplayer", "PotPlayer");
         otherPlatforms.put("foobar", "Foobar2000");
