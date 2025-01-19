@@ -45,12 +45,11 @@ public class AudioService {
     public void startGetMusicStatus() {
         // 封装命令行参数
         SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
-        String deviceId = settingsGeneral.getDeviceId();
-        String platform = settingsGeneral.getPlatform();
 
         List<Option> options = new ArrayList<>();
-        options.add(new Option("--device-id", deviceId));
-        options.add(new Option("--platform", platform));
+        options.add(new Option("--device-id", settingsGeneral.getDeviceId()));
+        options.add(new Option("--platform", settingsGeneral.getPlatform()));
+        options.add(new Option("--smtc", settingsGeneral.getSmtc().toString()));
         Args args = new Args(options);
 
         List<String> command = ConsoleUtil.getCommand("Assets\\AudioService\\GetMusicStatus.exe", args);
@@ -59,6 +58,7 @@ public class AudioService {
         try {
             // 启动 C# 程序
             ProcessBuilder processBuilder = new ProcessBuilder(command);
+            processBuilder.directory(new File("Assets"));  // 指定工作目录为 Assets
             getMusicStatusProcess = processBuilder.start();
 
             log.info("启动 C# 进程读取音乐状态");
@@ -114,8 +114,12 @@ public class AudioService {
      */
     @EventListener
     public void handleSettingsGeneralChange(SettingsGeneralChangeEvent event) {
-        // 如果通用设置被修改，则重启 GetMusicStatus 进程
+        // 如果通用设置被修改，则重启 GetMusicStatus 进程，并清空播放状态和窗口标题
         stopGetMusicStatus();
+
+        status = "None";
+        windowTitle = "";
+
         startGetMusicStatus();
     }
 

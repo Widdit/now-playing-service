@@ -29,7 +29,7 @@ if (settingsFile)
 }
 
 ; 软件退出前需执行操作
-OnExit("exitFunc")
+OnExit("ExitFunc")
 
 ; 如果不自动打开主页，则需要检查更新
 if (!autoLaunchHomePage)
@@ -48,7 +48,7 @@ if (!autoLaunchHomePage)
             MsgBox, 0x31, , 检测到新版本 %latestVersion%，是否前往下载？`n`n发布时间：`n%updateDate%`n`n更新日志：`n%updateLog%
             IfMsgBox OK
             {
-                Run, https://gitee.com/widdit/now-playing/releases
+                OpenPage("https://gitee.com/widdit/now-playing/releases", "下载页面")
                 ExitApp
             }
         }
@@ -91,14 +91,19 @@ Process, Exist, %servicePID%
 if (ErrorLevel = 0)
 {
     MsgBox, 0x10, , 该版本程序不兼容！请按照教程安装 32 位补丁
-    Run, https://www.kdocs.cn/l/cujPFHSMXiAJ
+    OpenPage("https://www.kdocs.cn/l/cujPFHSMXiAJ")
     ExitApp
 }
 
-; 自动打开主页
-if (autoLaunchHomePage)
+; 新版本第一次运行强制打开设置页面
+if (FileExist("Assets\first_run.txt"))
 {
-    Run, http://localhost:9863
+    OpenPage("http://localhost:9863/settings", "新版本页面")
+    FileDelete, Assets\first_run.txt
+}
+else if (autoLaunchHomePage)  ; 自动打开主页
+{
+    OpenPage("http://localhost:9863", "主页")
 }
 
 ; 每 2 秒检查 NowPlayingService.exe 是否存在，不存在则退出程序
@@ -136,7 +141,7 @@ return
 
 
 ; 软件退出前需执行操作
-exitFunc()
+ExitFunc()
 {
     global servicePID
 
@@ -159,6 +164,21 @@ GetRequest(url)
     responseStr := StrGet(pData, length, "utf-8")
 
     return responseStr
+}
+
+
+; 打开页面（带异常捕获）
+OpenPage(url, name := "页面")
+{
+    try
+    {
+        Run, %url%
+    }
+    catch
+    {
+        Clipboard := url
+        MsgBox, 0x10, , 打开%name%失败，请手动打开页面！（链接已复制到剪贴板）`n`n您可以通过重新设置【默认浏览器】来解决此问题
+    }
 }
 
 
@@ -186,13 +206,13 @@ VersionCompare(version1, version2)
 
 ; 托盘菜单 - 主页
 MenuHomeHandler:
-Run, http://localhost:9863
+OpenPage("http://localhost:9863")
 return
 
 
 ; 托盘菜单 - 设置
 MenuSettingsHandler:
-Run, http://localhost:9863/settings
+OpenPage("http://localhost:9863/settings")
 return
 
 
@@ -200,23 +220,23 @@ return
 MenuWidgetPreviewHandler:
 if (A_ThisMenuItem = "Main")
 {
-    Run, http://localhost:9863/widget
+    OpenPage("http://localhost:9863/widget")
 }
 else if (A_ThisMenuItem = "配置文件A")
 {
-    Run, http://localhost:9863/widget/profileA
+    OpenPage("http://localhost:9863/widget/profileA")
 }
 else if (A_ThisMenuItem = "配置文件B")
 {
-    Run, http://localhost:9863/widget/profileB
+    OpenPage("http://localhost:9863/widget/profileB")
 }
 else if (A_ThisMenuItem = "配置文件C")
 {
-    Run, http://localhost:9863/widget/profileC
+    OpenPage("http://localhost:9863/widget/profileC")
 }
 else if (A_ThisMenuItem = "配置文件D")
 {
-    Run, http://localhost:9863/widget/profileD
+    OpenPage("http://localhost:9863/widget/profileD")
 }
 return
 
@@ -236,7 +256,7 @@ Sleep 1000
 ; 自动打开主页
 if (autoLaunchHomePage)
 {
-    Run, http://localhost:9863
+    OpenPage("http://localhost:9863", "主页")
 }
 
 ; 每 2 秒检查 NowPlayingService.exe 是否存在，不存在则退出程序

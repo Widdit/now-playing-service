@@ -1,13 +1,17 @@
 package com.widdit.nowplaying.service;
 
 import com.widdit.nowplaying.entity.Base64Img;
+import com.widdit.nowplaying.entity.SettingsGeneral;
+import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
-import org.springframework.util.ResourceUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
+import javax.annotation.PostConstruct;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URL;
@@ -18,6 +22,12 @@ import java.util.Base64;
 @Service
 @Slf4j
 public class CoverService {
+
+    // 是否应该读取本地图片
+    private boolean shouldReadLocalImage;
+
+    @Autowired
+    private SettingsService settingsService;
 
     /**
      * 根据封面 URL 获取 BASE64 字符串
@@ -30,29 +40,38 @@ public class CoverService {
         Base64Img base64Img = null;
 
         try {
-            // 获取图片输入流
-            URL url = new URL(cover_url);
-            inputStream = url.openStream();
-            outputStream = new ByteArrayOutputStream();
+            if (shouldReadLocalImage) {
+                // 读取 C# 程序生成的本地图片文件（已经过 BASE64 编码）
+                String filePath = "Assets\\cover_base64.txt";
+                if (!Files.exists(Paths.get(filePath))) {
+                    throw new RuntimeException("本地文件 " + filePath + " 不存在");
+                }
+                String base64Str = new String(Files.readAllBytes(Paths.get(filePath)));
+                base64Img = new Base64Img(base64Str);
+            } else {
+                // 获取图片输入流
+                URL url = new URL(cover_url);
+                inputStream = url.openStream();
+                outputStream = new ByteArrayOutputStream();
 
-            // 获取图片的 MIME 类型
-            String mimeType = url.openConnection().getContentType();
+                // 获取图片的 MIME 类型
+                String mimeType = url.openConnection().getContentType();
 
-            // 读取输入流并写入到字节数组输出流
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
+                // 读取输入流并写入到字节数组输出流
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+
+                // 将输出流转换为字节数组
+                byte[] imageBytes = outputStream.toByteArray();
+
+                // 转换为 Base64 字符串
+                String base64Str = Base64.getEncoder().encodeToString(imageBytes);
+                base64Str = "data:" + mimeType + ";base64," + base64Str;
+                base64Img = new Base64Img(base64Str);
             }
-
-            // 将输出流转换为字节数组
-            byte[] imageBytes = outputStream.toByteArray();
-
-            // 转换为 Base64 字符串
-            String base64Str = Base64.getEncoder().encodeToString(imageBytes);
-            String result = "data:" + mimeType + ";base64," + base64Str;
-            base64Img = new Base64Img(result);
-
         } catch (Exception e) {
             log.error("歌曲封面转码 BASE64 失败，使用默认封面代替。异常信息：" + e.getMessage());
             try {
@@ -73,6 +92,25 @@ public class CoverService {
         }
 
         return base64Img;
+    }
+
+    /**
+     * 初始化操作。该方法会在该类实例被 Spring 创建时自动执行
+     */
+    @PostConstruct
+    public void init() {
+        SettingsGeneral settings = settingsService.getSettingsGeneral();
+        shouldReadLocalImage = checkShouldReadLocalImage(settings);
+    }
+
+    /**
+     * 监听通用设置被修改的事件
+     * @param event
+     */
+    @EventListener
+    public void handleSettingsGeneralChange(SettingsGeneralChangeEvent event) {
+        SettingsGeneral settings = settingsService.getSettingsGeneral();
+        shouldReadLocalImage = checkShouldReadLocalImage(settings);
     }
 
     /**
@@ -173,6 +211,44 @@ public class CoverService {
         }
 
         return realTitle.equals(searchedTitle);
+    }
+
+    /**
+     * 判断是否应该读取本地图片
+     * @param settings 通用设置对象
+     * @return
+     */
+    private boolean checkShouldReadLocalImage(SettingsGeneral settings) {
+        String platform = settings.getPlatform();
+        Boolean smtc = settings.getSmtc();
+
+        if (smtc == null) {
+            return false;
+        }
+
+        switch (platform) {
+            case "netease":
+            case "kuwo":
+                return false;
+
+            case "soda":
+            case "huahua":
+                return true;
+
+            case "qq":
+            case "kugou":
+            case "spotify":
+            case "apple":
+            case "ayna":
+            case "potplayer":
+            case "foobar":
+            case "lx":
+            case "musicfree":
+                return smtc;
+
+            default:
+                return false;
+        }
     }
 
 }

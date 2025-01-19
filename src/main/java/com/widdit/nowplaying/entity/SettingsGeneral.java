@@ -11,12 +11,19 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SettingsGeneral {
 
-    private String deviceId = "default";  // 音频设备ID
+    // 音频设备ID
+    private String deviceId = "default";
 
-    private String deviceName = "主声音驱动程序";  // 音频设备名称
+    // 音频设备名称
+    private String deviceName = "主声音驱动程序";
 
-    private String platform = "netease";  // 音乐平台
+    // 音乐平台
+    private String platform = "netease";
 
-    private Boolean autoLaunchHomePage = true;  // 启动时自动打开主页
+    // 启动时自动打开主页
+    private Boolean autoLaunchHomePage = true;
+
+    // 是否优先使用 SMTC
+    private Boolean smtc = true;
 
 }

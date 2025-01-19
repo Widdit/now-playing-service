@@ -7,6 +7,7 @@ import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
 import com.widdit.nowplaying.service.kugou.KuGouMusicService;
 import com.widdit.nowplaying.service.kuwo.KuWoMusicService;
+import com.widdit.nowplaying.service.netease.NeteaseMusicNewService;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.TimeUtil;
@@ -50,6 +51,8 @@ public class NowPlayingService {
     private KuGouMusicService kuGouMusicService;
     @Autowired
     private KuWoMusicService kuWoMusicService;
+    @Autowired
+    private NeteaseMusicNewService neteaseMusicNewService;
 
     /**
      * 返回歌曲信息
@@ -115,7 +118,12 @@ public class NowPlayingService {
 
             try {
                 if ("netease".equals(platform)) {
-                    track = neteaseMusicService.search(windowTitle);
+                    // 网易云音乐较为特殊，它实际上不支持 SMTC，但是能够读取本地数据文件来获取歌曲信息
+                    if (settings.getSmtc()) {
+                        track = neteaseMusicNewService.getTrackInfo(windowTitle);
+                    } else {
+                        track = neteaseMusicService.search(windowTitle);
+                    }
                 } else if ("qq".equals(platform)) {
                     track = qqMusicService.search(windowTitle);
                 } else if ("kugou".equals(platform)) {
@@ -149,7 +157,7 @@ public class NowPlayingService {
                     track.setAuthor(author);
                 } else {
                     track.setTitle(windowTitle);
-                    track.setAuthor("");
+                    track.setAuthor(" ");
                 }
             }
         }
@@ -171,7 +179,7 @@ public class NowPlayingService {
     }
 
     /**
-     * 初始化操作。该方法会在该类被 Spring 创建时自动执行
+     * 初始化操作。该方法会在该类实例被 Spring 创建时自动执行
      */
     @PostConstruct
     public void init() {
@@ -181,6 +189,9 @@ public class NowPlayingService {
         otherPlatforms.put("potplayer", "PotPlayer");
         otherPlatforms.put("foobar", "Foobar2000");
         otherPlatforms.put("lx", "洛雪音乐");
+        otherPlatforms.put("soda", "汽水音乐");
+        otherPlatforms.put("huahua", "花花直播助手");
+        otherPlatforms.put("musicfree", "MusicFree");
     }
 
     /**
