@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class QQMusicService
+public class QQMusicService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 

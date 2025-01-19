@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class NeteaseMusicService
+public class NeteaseMusicService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -93,9 +93,19 @@ public class NeteaseMusicService
             return;
         }
 
+        windowTitle = FixTitleNetease(windowTitle);
+
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
         Console.WriteLine(status);
         Console.WriteLine(windowTitle);
+    }
+
+    /*
+        修正网易云音乐标题
+    */
+    private string FixTitleNetease(string windowTitle)
+    {
+        return windowTitle.Replace("/", " / ");
     }
 }

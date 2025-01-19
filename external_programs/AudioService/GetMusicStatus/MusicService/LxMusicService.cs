@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class LxMusicService
+public class LxMusicService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -93,10 +93,10 @@ public class LxMusicService
     /*
         修正洛雪音乐标题
     */
-    static string FixTitleLx(string windowTitle)
+    private string FixTitleLx(string windowTitle)
     {
         windowTitle = windowTitle.Replace("、", " / ");
 
-        return windowTitle.Trim();
+        return windowTitle;
     }
 }

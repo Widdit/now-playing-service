@@ -1,14 +1,10 @@
 using System;
-using System.IO;
 using System.Text;
 using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-/*
-    Apple Music 没有窗口标题，此处通过魔改后的 Cider（一个能听 Apple Music 的客户端）来获取歌曲信息
-*/
-public class AppleMusicService : MusicService
+public class MusicFreeService : MusicService
 {
     public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -16,6 +12,7 @@ public class AppleMusicService : MusicService
 
         double volume = 0;
         bool musicAppRunning = false;
+        string windowTitle = "";
 
         try
         {
@@ -39,10 +36,11 @@ public class AppleMusicService : MusicService
 
                 string processName = sessionControl.Process.ProcessName;
 
-                if (processName.StartsWith("Cider"))
+                if (processName.StartsWith("MusicFree"))
                 {
                     musicAppRunning = true;
                     volume = session.QueryInterface<AudioMeterInformation>().PeakValue;
+                    // MusicFree 的窗口标题需另行获取
                     break;
                 }
             }
@@ -60,16 +58,27 @@ public class AppleMusicService : MusicService
             return;
         }
 
-        string title = "";
-        string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string filePath = Path.Combine(appDataPath, "Cider", "Plugins", "title.txt");
-
-        if (File.Exists(filePath))
+        // 获取 MusicFree 的窗口标题
+        try
         {
-            title = File.ReadAllText(filePath, Encoding.UTF8).Trim();
+            List<string> allTitles = WindowDetector.GetWindowTitles("MusicFree");
+            foreach (string title in allTitles)
+            {
+                if (title.Contains(" - "))
+                {
+                    windowTitle = FixTitleMusicFree(title);
+                    break;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            Console.WriteLine("None");
+            return;
         }
 
-        if (string.IsNullOrEmpty(title))
+        // 如果窗口标题为空（说明没成功获取到），则返回 None
+        if (string.IsNullOrEmpty(windowTitle))
         {
             Console.WriteLine("None");
             return;
@@ -78,6 +87,17 @@ public class AppleMusicService : MusicService
         // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
         Console.WriteLine(status);
-        Console.WriteLine(title);
+        Console.WriteLine(windowTitle);
+    }
+
+    /*
+        修正 MusicFree 标题
+    */
+    private string FixTitleMusicFree(string windowTitle)
+    {
+        windowTitle = windowTitle.Replace("、", " / ");
+        windowTitle = windowTitle.Replace("&", " / ");
+
+        return windowTitle;
     }
 }

@@ -6,14 +6,19 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using CSCore.CoreAudioAPI;
 
-public class AynaLivePlayerService
+public class AynaLivePlayerService : MusicService
 {
-    private static string title = "";
-    private static string artist = "";
-    private static bool paused = true;
-    private static bool webSocketConnected = false;
+    private string title = "";
+    private string artist = "";
+    private bool paused = true;
+    private bool webSocketConnected = false;
 
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void Init()
+    {
+        GetMusicStatus();
+    }
+
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -29,43 +34,42 @@ public class AynaLivePlayerService
         Console.WriteLine(title + " - " + artist);
     }
 
-    public static async Task StartMusicStatusMonitor()
-    {
-        while (true)
-        {
-            await GetMusicStatus();
-            await Task.Delay(1000);  // 连接中断或失败，等待 1 秒后重试
-        }
-    }
-
-    private static async Task GetMusicStatus()
+    private async Task GetMusicStatus()
     {
         Uri serverUri = new Uri("ws://localhost:29629/wsinfo");
 
-        using (ClientWebSocket clientWebSocket = new ClientWebSocket())
+        while (true)
         {
-            try
+            using (ClientWebSocket clientWebSocket = new ClientWebSocket())
             {
-                // 连接 WebSocket 服务器
-                await clientWebSocket.ConnectAsync(serverUri, CancellationToken.None);
+                try
+                {
+                    // 连接 WebSocket 服务器
+                    await clientWebSocket.ConnectAsync(serverUri, CancellationToken.None);
 
-                webSocketConnected = true;
+                    webSocketConnected = true;
 
-                // 接收消息
-                await ReceiveMessages(clientWebSocket);
+                    // 接收消息
+                    await ReceiveMessages(clientWebSocket);
+                }
+                catch (Exception) {}
             }
-            catch (Exception) {}
-        }
 
-        // WebSocket 连接失败或中断
-        webSocketConnected = false;
-        title = "";
-        artist = "";
-        paused = true;
+            // WebSocket 连接失败或中断
+            webSocketConnected = false;
+            title = "";
+            artist = "";
+            paused = true;
+
+            // 等待 1 秒后重试
+            await Task.Delay(1000);
+        }
     }
 
-    // 接收服务器消息
-    private static async Task ReceiveMessages(ClientWebSocket clientWebSocket)
+    /*
+        接收服务器消息
+    */
+    private async Task ReceiveMessages(ClientWebSocket clientWebSocket)
     {
         byte[] buffer = new byte[1024];
         StringBuilder messageBuilder = new StringBuilder();
@@ -83,6 +87,7 @@ public class AynaLivePlayerService
                 {
                     string message = messageBuilder.ToString();
 
+                    // 仅处理短的消息（长的消息是歌单列表，是无关信息）
                     if (message.Length < 1024 * 2)
                     {
                         // 处理消息
@@ -100,8 +105,10 @@ public class AynaLivePlayerService
         }
     }
 
-    // 处理接收到的 JSON 数据
-    private static void ProcessMessage(string message)
+    /*
+        处理接收到的 JSON 数据
+    */
+    private void ProcessMessage(string message)
     {
         try
         {
@@ -112,10 +119,11 @@ public class AynaLivePlayerService
             {
                 string eventID = json["EventID"].ToString();
 
-                if (eventID == "update.player.playing")
+                if (eventID == "update.player.playing" || eventID == "cmd.player.op.play")
                 {
                     title = json["Data"]["Media"]["Info"]["Title"].ToString();
                     artist = json["Data"]["Media"]["Info"]["Artist"].ToString();
+                    artist = artist.Replace(",", " / ");
                 }
                 else if (eventID == "update.player.property.pause")
                 {

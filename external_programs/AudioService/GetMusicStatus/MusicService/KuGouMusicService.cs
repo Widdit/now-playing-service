@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class KuGouMusicService
+public class KuGouMusicService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -115,7 +115,7 @@ public class KuGouMusicService
         修正酷狗音乐标题
         酷狗音乐标题会滚动，例如 "还是他 - 酷狗音乐 陶喆 - 爱我"，需要修正为 "酷狗音乐 陶喆 - 爱我还是他 - "
     */
-    static string FixTitleKuGou(string windowTitle)
+    private string FixTitleKuGou(string windowTitle)
     {
         if (!windowTitle.Contains("酷狗"))  // 酷狗两个字被拆开了
         {
@@ -126,7 +126,7 @@ public class KuGouMusicService
 
         // 去除无关信息（"酷狗音乐 陶喆 - 爱我还是他 - " ==> "陶喆 - 爱我还是他"）
         windowTitle = windowTitle.Substring(5, windowTitle.Length - 8);
-        windowTitle = windowTitle.Replace("、", " ");
+        windowTitle = windowTitle.Replace("、", " / ");
 
         // 把歌名放前面，歌手放后面
         if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))

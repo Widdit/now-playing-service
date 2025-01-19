@@ -6,20 +6,21 @@ using System.Collections.Generic;
 using System.Threading;
 
 /*
-    检测音乐软件的播放状态（Playing, Paused, None）、窗口标题
+    检测音乐软件的播放状态（Playing, Paused, None）、歌曲信息
     每隔 1 秒输出一次
     输出格式：
     "
         播放状态
-        窗口标题
+        歌名 - 歌手名
     "
     接收命令行参数：
         --device-id  音频设备 ID。仅检测该音频设备，默认值为 "default"，检测默认音频设备。
         --platform  音乐平台。期望检测的音乐软件平台，默认值为 "netease"，检测网易云音乐。
+        --smtc  是否优先使用 SMTC。默认值为 true，优先通过 SMTC 识别歌曲信息。
 */
 class Program
 {
-    static void Main(string deviceId = "default", string platform = "netease")
+    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -44,39 +45,40 @@ class Program
             return;
         }
 
-        // 检测并输出相应音乐平台的播放状态
-        var musicServices = new Dictionary<string, Action>
+        var musicServiceMap = new Dictionary<string, Func<bool, MusicService>>()
         {
-            { "netease", () => NeteaseMusicService.PrintMusicStatus(sessionManager) },
-            { "qq", () => QQMusicService.PrintMusicStatus(sessionManager) },
-            { "kugou", () => KuGouMusicService.PrintMusicStatus(sessionManager) },
-            { "kuwo", () => KuWoMusicService.PrintMusicStatus(sessionManager) },
-            { "spotify", () => SpotifyMusicService.PrintMusicStatus(sessionManager) },
-            { "ayna", () => AynaLivePlayerService.PrintMusicStatus(sessionManager) },
-            { "apple", () => AppleMusicService.PrintMusicStatus(sessionManager) },
-            { "potplayer", () => PotPlayerService.PrintMusicStatus(sessionManager) },
-            { "foobar", () => FoobarService.PrintMusicStatus(sessionManager) },
-            { "lx", () => LxMusicService.PrintMusicStatus(sessionManager) }
+            { "netease", (smtc) => new NeteaseMusicService() },
+            { "qq", (smtc) => smtc ? new QQMusicSMTC() : new QQMusicService() },
+            { "kugou", (smtc) => smtc ? new KuGouMusicSMTC() : new KuGouMusicService() },
+            { "kuwo", (smtc) => new KuWoMusicService() },
+            { "soda", (smtc) => new SodaMusicSMTC() },
+            { "spotify", (smtc) => smtc ? new SpotifyMusicSMTC() : new SpotifyMusicService() },
+            { "apple", (smtc) => smtc ? new AppleMusicSMTC() : new AppleMusicService() },
+            { "ayna", (smtc) => smtc ? new AynaLivePlayerSMTC() : new AynaLivePlayerService() },
+            { "potplayer", (smtc) => smtc ? new PotPlayerSMTC() : new PotPlayerService() },
+            { "foobar", (smtc) => smtc ? new FoobarSMTC() : new FoobarService() },
+            { "lx", (smtc) => smtc ? new LxMusicSMTC() : new LxMusicService() },
+            { "huahua", (smtc) => new HuaHuaLiveService() },
+            { "musicfree", (smtc) => smtc ? new MusicFreeSMTC() : new MusicFreeService() }
         };
 
-        if (musicServices.ContainsKey(platform))
+        MusicService musicService;
+        if (musicServiceMap.TryGetValue(platform, out var createService))
         {
-            if (platform == "ayna")  // 卡西米尔唱片机
-            {
-                AynaLivePlayerService.StartMusicStatusMonitor();
-            }
-
-            var serviceAction = musicServices[platform];
-            while (true)
-            {
-                // 调用对应平台的方法
-                serviceAction(); 
-                Thread.Sleep(1000);
-            }
+            musicService = createService(smtc);
         }
         else
         {
             Console.WriteLine($"Unsupported platform: {platform}");
+            return;
+        }
+
+        musicService.Init();
+        
+        while (true)
+        {
+            musicService.PrintMusicStatus(sessionManager);
+            Thread.Sleep(1000);
         }
     }
 

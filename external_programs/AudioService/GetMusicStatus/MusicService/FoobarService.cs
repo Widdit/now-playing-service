@@ -5,9 +5,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class FoobarService
+public class FoobarService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -102,15 +102,22 @@ public class FoobarService
 
     /*
         修正 Foobar2000 标题
-        "Christopher Cross - [Christopher Cross #08] Sailing  [foobar2000]" → "Christopher Cross - Sailing"
+        "Christopher Cross - [Christopher Cross #08] Sailing  [foobar2000]" → "Sailing - Christopher Cross"
     */
-    static string FixTitleFoobar(string windowTitle)
+    private string FixTitleFoobar(string windowTitle)
     {
         // 删除所有 [] 的内容
         windowTitle = Regex.Replace(windowTitle, @"\[[^\]]*\]", "");
 
         // 将所有连续的多个空格替换为单个空格
         windowTitle = Regex.Replace(windowTitle, @"\s+", " ");
+
+        // 把歌名放前面，歌手放后面
+        if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))
+        {
+            string[] split = windowTitle.Split('-');
+            windowTitle = split[1].Trim() + " - " + split[0].Trim();
+        }
 
         return windowTitle.Trim();
     }

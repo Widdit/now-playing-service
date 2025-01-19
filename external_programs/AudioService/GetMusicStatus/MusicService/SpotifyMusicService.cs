@@ -5,9 +5,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class SpotifyMusicService
+public class SpotifyMusicService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -127,7 +127,7 @@ public class SpotifyMusicService
         修正 Spotify 标题
         把歌名放前面，歌手放后面
     */
-    static string FixTitleSpotify(string windowTitle)
+    private string FixTitleSpotify(string windowTitle)
     {
         if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))
         {

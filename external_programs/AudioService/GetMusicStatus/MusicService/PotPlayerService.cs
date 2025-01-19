@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
 
-public class PotPlayerService
+public class PotPlayerService : MusicService
 {
-    public static void PrintMusicStatus(AudioSessionManager2 sessionManager)
+    public override void PrintMusicStatus(AudioSessionManager2 sessionManager)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -103,9 +103,9 @@ public class PotPlayerService
 
     /*
         修正 PotPlayer 标题
-        "Christopher Cross - Sailing.flac - PotPlayer" → "Christopher Cross - Sailing"
+        "Christopher Cross - Sailing.flac - PotPlayer" → "Sailing - Christopher Cross"
     */
-    static string FixTitlePotPlayer(string windowTitle)
+    private string FixTitlePotPlayer(string windowTitle)
     {
         int lastDotIndex = windowTitle.LastIndexOf('.');
 
@@ -114,6 +114,13 @@ public class PotPlayerService
             windowTitle = windowTitle.Substring(0, lastDotIndex);
         }
 
-        return windowTitle.Trim();
+        // 把歌名放前面，歌手放后面
+        if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))
+        {
+            string[] split = windowTitle.Split('-');
+            windowTitle = split[1].Trim() + " - " + split[0].Trim();
+        }
+
+        return windowTitle;
     }
 }
