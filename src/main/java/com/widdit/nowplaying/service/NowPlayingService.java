@@ -147,11 +147,12 @@ public class NowPlayingService {
                         .build();
             } finally {
                 // 使用窗口标题去覆盖歌曲信息，保证歌名、歌手名和音乐软件中的完全一致
-                if (windowTitle.contains("-")) {
-                    int pos = windowTitle.lastIndexOf("-");
+                String pivot = " - ";
+                if (windowTitle.contains(pivot)) {
+                    int pos = windowTitle.lastIndexOf(pivot);
 
                     String title = windowTitle.substring(0, pos).trim();
-                    String author = windowTitle.substring(pos + 1).trim();
+                    String author = windowTitle.substring(pos + pivot.length()).trim();
 
                     track.setTitle(title);
                     track.setAuthor(author);

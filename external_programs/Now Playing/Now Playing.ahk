@@ -8,8 +8,19 @@
     ****************** 版本信息 ******************
     =============================================
 */
-currentVersion := "1.0.6"
+currentVersion := "1.0.7"
 
+
+SetWorkingDir %A_ScriptDir%
+
+; 如果程序在 C 盘，则以管理员身份重新运行
+if (SubStr(A_ScriptFullPath, 1, 2) = "C:")
+{
+    RunAsAdmin()
+}
+
+; 常量
+PLUGIN_SETTINGS_PATH := "Plugins/settings-plugin.json"
 
 ; 通用设置项
 autoLaunchHomePage := true  ; 是否自动打开主页
@@ -21,11 +32,31 @@ if (settingsFile)
     settingsStr := settingsFile.Read()
     settingsFile.Close()
 
-    if (InStr(settingsStr, "autoLaunchHomePage"))
-    {
-        settingsObj := JSON.Load(settingsStr)
-        autoLaunchHomePage := settingsObj.autoLaunchHomePage
-    }
+    ; 将字符串反序列化为对象
+    settingsObj := JSON.Load(settingsStr)
+    autoLaunchHomePage := settingsObj.autoLaunchHomePage
+}
+
+; 读取插件设置文件
+pluginSettingsFile := FileOpen(PLUGIN_SETTINGS_PATH, "r", "UTF-8")
+if (pluginSettingsFile)
+{
+    pluginSettingsStr := pluginSettingsFile.Read()
+    pluginSettingsFile.Close()
+
+    ; 将字符串反序列化为对象
+    pluginSettingsObj := JSON.Load(pluginSettingsStr)
+}
+else
+{
+    pluginSettingsObj := {}
+    pluginSettingsObj.desktopWidgetEnabled := true  ; 是否启用桌面组件
+
+    ; 将对象序列化为字符串
+    pluginSettingsStr := JSON.Dump(pluginSettingsObj, , "`t")
+
+    FileCreateDir, Plugins
+    FileAppend, %pluginSettingsStr%, %PLUGIN_SETTINGS_PATH%, UTF-8
 }
 
 ; 软件退出前需执行操作
@@ -59,19 +90,26 @@ if (!autoLaunchHomePage)
     }
 }
 
-; 检测 Java 运行环境
-if (!FileExist("jre") && !FileExist("jre1.8") && !FileExist("jre-1.8") && !FileExist("jdk1.8") && !FileExist("jdk-1.8"))
+; 检测是否有 jre，如果没有，则自动下载并解压
+if (!FileExist("jre\bin\java.exe"))
 {
-    EnvGet, javaHome, JAVA_HOME
-    if (javaHome = "")
+    if (FileExist("jre"))
     {
-        MsgBox, 0x10, , JAVA_HOME 环境变量未配置！`n如果您已配置，重启电脑后生效
+        FileRemoveDir, jre, 1
+    }
+
+    RunWait, Assets\DownloadJava.exe
+    if (ErrorLevel)
+    {
         ExitApp
     }
-    javaExePath := javaHome . "\bin\java.exe"
-    if (!FileExist(javaExePath))
+
+    Sleep 200
+
+    if (!FileExist("jre\bin\java.exe"))
     {
-        MsgBox, 0x10, , JAVA_HOME 环境变量配置有误，请检查！`nJAVA_HOME: %javaHome%
+        MsgBox, 0x10, , 安装 OpenJDK11 失败！请按照图文教程手动完成安装
+        OpenPage("https://www.kdocs.cn/l/cePnk1nX4Glw", "教程")
         ExitApp
     }
 }
@@ -90,7 +128,7 @@ Sleep 1000
 Process, Exist, %servicePID%
 if (ErrorLevel = 0)
 {
-    MsgBox, 0x10, , 该版本程序不兼容！请按照教程安装 32 位补丁
+    MsgBox, 0x10, , 该版本程序不兼容！请按照教程安装其它版本
     OpenPage("https://www.kdocs.cn/l/cujPFHSMXiAJ")
     ExitApp
 }
@@ -122,8 +160,18 @@ Menu, Tray, Add, 主页, MenuHomeHandler
 Menu, Tray, Add, 设置, MenuSettingsHandler
 Menu, Tray, Add, 组件预览, :PreviewMenu
 Menu, Tray, Add  ; 分割线
+Menu, Tray, Add, 启用桌面组件, DesktopWidgetEnableHandler
+Menu, Tray, Add, 桌面组件设置, DesktopWidgetShowWindowHandler
+Menu, Tray, Add  ; 分割线
 Menu, Tray, Add, 重新启动, MenuRestartHandler
 Menu, Tray, Add, 退出, MenuExitHandler
+
+if (pluginSettingsObj.desktopWidgetEnabled)
+{
+    Menu, Tray, Check, 启用桌面组件
+    Sleep 1000
+    Run, Plugins\desktop-widget\now-playing-desktop-widget.exe
+}
 
 return
 
@@ -182,6 +230,25 @@ OpenPage(url, name := "页面")
 }
 
 
+; 检查当前程序是否以管理员身份运行，如果不是，则以管理员身份重新运行
+RunAsAdmin()
+{
+    full_command_line := DllCall("GetCommandLine", "str")
+
+    if not (A_IsAdmin or RegExMatch(full_command_line, " /restart(?!\S)"))
+    {
+        try
+        {
+            if A_IsCompiled
+                Run *RunAs "%A_ScriptFullPath%" /restart
+            else
+                Run *RunAs "%A_AhkPath%" /restart "%A_ScriptFullPath%"
+        }
+        ExitApp
+    }
+}
+
+
 ; 比较两个版本号（格式形如 1.0.5）。如果 version1 < version2，返回 -1；大于返回 1；相等返回 0
 VersionCompare(version1, version2)
 {
@@ -201,6 +268,20 @@ VersionCompare(version1, version2)
     }
 
     return 0
+}
+
+
+; 保存插件设置
+SavePluginSettings()
+{
+    global PLUGIN_SETTINGS_PATH
+    global pluginSettingsObj
+
+    ; 将对象序列化为字符串
+    pluginSettingsStr := JSON.Dump(pluginSettingsObj, , "`t")
+
+    FileDelete, %PLUGIN_SETTINGS_PATH%
+    FileAppend, %pluginSettingsStr%, %PLUGIN_SETTINGS_PATH%, UTF-8
 }
 
 
@@ -237,6 +318,57 @@ else if (A_ThisMenuItem = "配置文件C")
 else if (A_ThisMenuItem = "配置文件D")
 {
     OpenPage("http://localhost:9863/widget/profileD")
+}
+return
+
+
+; 托盘菜单 - 启用桌面组件
+DesktopWidgetEnableHandler:
+Menu, Tray, ToggleCheck, 启用桌面组件
+pluginSettingsObj.desktopWidgetEnabled := !pluginSettingsObj.desktopWidgetEnabled
+
+if (pluginSettingsObj.desktopWidgetEnabled)
+{
+    ; 运行桌面组件
+    Run, Plugins\desktop-widget\now-playing-desktop-widget.exe
+}
+else
+{
+    ; 关闭桌面组件
+    try
+    {
+        GetRequest("http://localhost:9864/exit")
+        Sleep 500
+        Process, Close, now-playing-desktop-widget.exe
+    }
+    catch
+    {
+        ; Ignored
+    }
+}
+
+SavePluginSettings()
+return
+
+
+; 托盘菜单 - 桌面组件设置
+DesktopWidgetShowWindowHandler:
+if (!pluginSettingsObj.desktopWidgetEnabled)
+{
+    MsgBox, 0x30, , 您需要先启用桌面组件！
+    return
+}
+
+try
+{
+    if (GetRequest("http://localhost:9864/show") != "ok")
+    {
+        throw Exception("error")
+    }
+}
+catch
+{
+    MsgBox, 0x10, , 显示桌面组件设置失败！
 }
 return
 

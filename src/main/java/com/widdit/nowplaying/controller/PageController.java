@@ -51,6 +51,11 @@ public class PageController {
         return "settings-widget";
     }
 
+    @GetMapping("/settings/desktop")
+    public String settingsDesktop() {
+        return "settings-desktop";
+    }
+
     @GetMapping("/404")
     public String state404() {
         return "404";

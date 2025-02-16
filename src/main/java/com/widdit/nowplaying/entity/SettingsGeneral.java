@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SettingsGeneral {
 
-    // 音频设备ID
+    // 音频设备 ID
     private String deviceId = "default";
 
     // 音频设备名称
@@ -23,7 +23,10 @@ public class SettingsGeneral {
     // 启动时自动打开主页
     private Boolean autoLaunchHomePage = true;
 
-    // 是否优先使用 SMTC
+    // 优先使用 SMTC
     private Boolean smtc = true;
+
+    // 开机自启
+    private Boolean runAtStartup = false;
 
 }

@@ -51,6 +51,35 @@ public class ConsoleUtil {
     }
 
     /**
+     * 运行程序
+     * @param exePath EXE 程序路径
+     * @return exitCode
+     * @throws Exception
+     */
+    public static int run(String exePath) throws Exception {
+        return run(exePath, null);
+    }
+
+    /**
+     * 运行程序
+     * @param exePath EXE 程序路径
+     * @param args 参数对象
+     * @return exitCode
+     * @throws Exception
+     */
+    public static int run(String exePath, Args args) throws Exception {
+        List<String> command = getCommand(exePath, args);
+
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+
+        // 启动进程
+        Process process = processBuilder.start();
+
+        // 等待进程结束
+        return process.waitFor();
+    }
+
+    /**
      * 根据 EXE 路径和参数对象，获取命令列表（作为 ProcessBuilder 构造方法的参数）
      * @param exePath EXE 程序路径
      * @param args 参数对象
