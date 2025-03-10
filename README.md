@@ -30,35 +30,13 @@ QQ 交流群：150453391
 
 
 
-## 如何安装
-
-1. 安装 JDK 或 JRE（版本 ≥ 1.8 即可）
-   - 如果你从未安装过 Java 环境，可前往 [Java 官网](https://www.java.com/zh-CN/) 进行下载
-   - 安装好后需配置 JAVA_HOME 和 Path 环境变量：[教程](https://www.bilibili.com/video/BV1uJ411k7wy?p=9)
-2. 前往 [Release](https://github.com/Widdit/now-playing-service/releases) 页面下载最新版本的 ZIP 压缩包，将压缩包解压至任意目录，例如 D 盘根目录
-3. 此时双击 `NowPlayingService.exe` 即可启动程序
-   - 请不要关闭控制台（黑窗口），关闭它就意味着结束程序
-   - 信息日志在 info.log 里查看，错误日志在 error.log 里查看
-4. 浏览器访问 `http://localhost:9863`，当看到页面上显示 "NowPlaying Service is Running" 就说明程序运行成功
-
-
-
-## 如何编译
-
-- 由于版权原因，该项目仅包含后端代码
-- 核心代码使用 Java 编写，使用 IDEA 打开即可
-  - **运行：**运行 NowPlayingApplication 类的 main 方法
-  - **打包：**双击 IDEA 右侧 Maven - Lifecycle 的 clean，然后再双击 package，即可生成 JAR 包
-  - **JAR To EXE：**你可以使用 [exe4j](https://www.ej-technologies.com/exe4j/download) 将 JAR 包转为 EXE
-- 外部程序 `external_programs/AudioService/GetMusicStatus` 的代码使用 C# 编写，使用 VS Code 打开
-  - **运行：**`dotnet run`
-  - **打包：**`dotnet publish -c Release -r win-x64 --self-contained -o ./publish`
-
-
-
 ## 使用方法
 
 ### 方法一
+
+- 前往 [Release](https://github.com/Widdit/now-playing-service/releases) 页面下载整合包，开箱即用，无需进行任何配置
+
+### 方法二
 
 - 结合 [该网站](https://6klabs.com/amuse) 使用
 - 首先使用 Google 账号登录（只有登录时才用到梯子），然后点击 "Widgets" 页面进入组件的设置页面
@@ -68,12 +46,25 @@ QQ 交流群：150453391
 ![](/images/sample_1.png)
 ![](/images/sample_2.png)
 
-### 方法二
+### 方法三
 
 - 自己编写前端页面来渲染歌曲组件，调用接口 `http://localhost:9863/query`（请求方式为 GET，建议每秒调用一次）
 - 下图为接口响应示例。其中 player 为播放器信息，track 为歌曲信息
 
 ![](/images/query_response.png)
+
+
+
+## 如何编译
+
+- 由于版权原因，该项目仅包含后端代码
+- 核心代码使用 Java 编写，使用 IDEA 打开即可
+  - 运行：运行 NowPlayingApplication 类的 main 方法
+  - 打包：双击 IDEA 右侧 Maven - Lifecycle 的 clean，然后再双击 package，即可在 target 目录下生成 JAR 包
+  - JAR To EXE：你可以使用 [exe4j](https://www.ej-technologies.com/exe4j/download) 将 JAR 包转为 EXE
+- 外部程序 `external_programs/AudioService/GetMusicStatus` 的代码使用 C# 编写，使用 VS Code 打开
+  - 运行：`dotnet run`
+  - 打包：`dotnet publish -c Release -r win-x64 --self-contained -o ./publish`
 
 
 
