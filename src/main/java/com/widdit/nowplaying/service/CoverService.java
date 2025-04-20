@@ -233,6 +233,7 @@ public class CoverService {
 
             case "soda":
             case "huahua":
+            case "bq":
                 return true;
 
             case "qq":

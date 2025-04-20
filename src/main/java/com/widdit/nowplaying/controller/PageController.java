@@ -21,19 +21,29 @@ public class PageController {
         return "widget";
     }
 
-    @GetMapping("/widget-widdit")
-    public String widgetWiddit() {
-        return "widget-widdit";
-    }
-
     @GetMapping("/widget/*")
     public String widgetWithProfile() {
         return "widget";
     }
 
+    @GetMapping("/widget-widdit")
+    public String widgetWiddit() {
+        return "widget-widdit";
+    }
+
     @GetMapping("/widget-widdit/*")
     public String widgetWithProfileWiddit() {
         return "widget-widdit";
+    }
+
+    @GetMapping("/widget-green")
+    public String widgetGreen() {
+        return "widget-green";
+    }
+
+    @GetMapping("/widget-green/*")
+    public String widgetWithProfileGreen() {
+        return "widget-green";
     }
 
     @GetMapping("/settings")
@@ -59,6 +69,16 @@ public class PageController {
     @GetMapping("/404")
     public String state404() {
         return "404";
+    }
+
+    @GetMapping("/lyric")
+    public String lyric() {
+        return "lyric";
+    }
+
+    @GetMapping("/lyric/1")
+    public String lyric1() {
+        return "lyric-1";
     }
 
 }

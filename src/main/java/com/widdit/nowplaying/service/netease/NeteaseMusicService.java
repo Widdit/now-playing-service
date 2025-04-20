@@ -1,5 +1,6 @@
 package com.widdit.nowplaying.service.netease;
 
+import com.widdit.nowplaying.entity.Lyric;
 import com.widdit.nowplaying.entity.ReqJsonObject;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.service.qq.QQMusicService;
@@ -12,8 +13,11 @@ import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -120,7 +124,7 @@ public class NeteaseMusicService {
      * @param id 歌曲 id
      * @return
      */
-    private String getCover(String id) throws IOException {
+    public String getCover(String id) throws IOException {
         // 封装请求参数对象
         ReqJsonObject reqJsonObject = new ReqJsonObject();
         reqJsonObject.set("id", id);
@@ -144,6 +148,79 @@ public class NeteaseMusicService {
         cover += "?param=500y500";  // 图片大小设置为 500*500
 
         return cover;
+    }
+
+    /**
+     * 从网易云音乐获取歌词对象
+     * @param keyword 关键词
+     * @return
+     * @throws Exception
+     */
+    public Lyric getLyric(String keyword) throws Exception {
+        Track track = search(keyword);
+        String id = track.getId();
+
+        log.info("从网易云音乐获取歌词..");
+
+        Map<String, String> data = new HashMap<>();
+        data.put("id", id);
+        data.put("cp", "false");
+        data.put("lv", "0");
+        data.put("kv", "0");
+        data.put("tv", "0");
+        data.put("rv", "0");
+        data.put("yv", "0");
+        data.put("ytv", "0");
+        data.put("yrv", "0");
+        data.put("csrf_token", "");
+        String respStr = EapiHelper.post("https://interface3.music.163.com/eapi/song/lyric/v1", data);
+
+        // System.out.println(respStr);
+
+        // 解析 JSON 字符串为 JSONObject
+        JSONObject jsonObject = JSON.parseObject(respStr);
+
+        // 检查响应数据的 code
+        if (!jsonObject.containsKey("code") || jsonObject.getIntValue("code") != 200) {
+            throw new RuntimeException("获取歌词失败：id = " + id);
+        }
+
+        Lyric lyric = new Lyric();
+        lyric.setSource("netease");
+
+        if (!jsonObject.containsKey("lrc")) {
+            return lyric;
+        }
+
+        // 提取原版歌词
+        String lrc = jsonObject.getJSONObject("lrc").getString("lyric");
+        if (lrc == null || "".equals(lrc) || !lrc.contains("00")) {
+            return lyric;
+        }
+        lyric.setHasLyric(true);
+        lyric.setLrc(lrc);
+
+        // 提取翻译歌词
+        if (jsonObject.containsKey("tlyric")) {
+            String translatedLyric = jsonObject.getJSONObject("tlyric").getString("lyric");
+            if (!StringUtils.isBlank(translatedLyric)) {
+                lyric.setHasTranslatedLyric(true);
+                lyric.setTranslatedLyric(translatedLyric);
+            }
+        }
+
+        // 提取逐词歌词
+        if (jsonObject.containsKey("yrc")) {
+            String karaokeLyric = jsonObject.getJSONObject("yrc").getString("lyric");
+            if (!StringUtils.isBlank(karaokeLyric)) {
+                lyric.setHasKaraokeLyric(true);
+                lyric.setKaraokeLyric(karaokeLyric);
+            }
+        }
+
+        log.info("获取成功");
+
+        return lyric;
     }
 
     /**

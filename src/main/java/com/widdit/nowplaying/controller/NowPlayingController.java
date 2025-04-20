@@ -29,6 +29,15 @@ public class NowPlayingController {
     }
 
     /**
+     * 获取播放器进度条毫秒值
+     * @return
+     */
+    @GetMapping("/query/progress")
+    public QueryProgress queryProgress() {
+        return nowPlayingService.queryProgress();
+    }
+
+    /**
      * 获取歌曲封面的 BASE64 编码
      * @param coverConvertDTO
      * @return

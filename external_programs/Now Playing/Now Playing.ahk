@@ -8,7 +8,7 @@
     ****************** 版本信息 ******************
     =============================================
 */
-currentVersion := "1.0.7"
+currentVersion := "1.0.8"
 
 
 SetWorkingDir %A_ScriptDir%
@@ -49,8 +49,9 @@ if (pluginSettingsFile)
 }
 else
 {
+    ; 创建默认插件设置文件
     pluginSettingsObj := {}
-    pluginSettingsObj.desktopWidgetEnabled := true  ; 是否启用桌面组件
+    pluginSettingsObj.desktopWidgetEnabled := false  ; 是否启用桌面组件
 
     ; 将对象序列化为字符串
     pluginSettingsStr := JSON.Dump(pluginSettingsObj, , "`t")
@@ -136,7 +137,9 @@ if (ErrorLevel = 0)
 ; 新版本第一次运行强制打开设置页面
 if (FileExist("Assets\first_run.txt"))
 {
-    OpenPage("http://localhost:9863/settings", "新版本页面")
+    OpenPage("http://localhost:9863", "主页")
+    Sleep 2000
+    OpenPage("http://localhost:9863/lyric", "新版本页面")
     FileDelete, Assets\first_run.txt
 }
 else if (autoLaunchHomePage)  ; 自动打开主页
@@ -162,6 +165,8 @@ Menu, Tray, Add, 组件预览, :PreviewMenu
 Menu, Tray, Add  ; 分割线
 Menu, Tray, Add, 启用桌面组件, DesktopWidgetEnableHandler
 Menu, Tray, Add, 桌面组件设置, DesktopWidgetShowWindowHandler
+Menu, Tray, Add  ; 分割线
+Menu, Tray, Add, 打开歌词页面, LyricTestHandler
 Menu, Tray, Add  ; 分割线
 Menu, Tray, Add, 重新启动, MenuRestartHandler
 Menu, Tray, Add, 退出, MenuExitHandler
@@ -192,9 +197,25 @@ return
 ExitFunc()
 {
     global servicePID
+    global pluginSettingsObj
 
     Process, Close, %servicePID%
     Process, Close, GetMusicStatus.exe
+
+    if (pluginSettingsObj.desktopWidgetEnabled)
+    {
+        ; 关闭桌面组件
+        try
+        {
+            GetRequest("http://localhost:9864/exit")
+            Sleep 500
+        }
+        catch
+        {
+            ; Ignored
+        }
+        Process, Close, now-playing-desktop-widget.exe
+    }
 }
 
 
@@ -339,12 +360,12 @@ else
     {
         GetRequest("http://localhost:9864/exit")
         Sleep 500
-        Process, Close, now-playing-desktop-widget.exe
     }
     catch
     {
         ; Ignored
     }
+    Process, Close, now-playing-desktop-widget.exe
 }
 
 SavePluginSettings()
@@ -370,6 +391,12 @@ catch
 {
     MsgBox, 0x10, , 显示桌面组件设置失败！
 }
+return
+
+
+; 托盘菜单 - 打开歌词页面
+LyricTestHandler:
+OpenPage("http://localhost:9863/lyric")
 return
 
 

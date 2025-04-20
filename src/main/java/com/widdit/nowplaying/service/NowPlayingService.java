@@ -1,9 +1,6 @@
 package com.widdit.nowplaying.service;
 
-import com.widdit.nowplaying.entity.Player;
-import com.widdit.nowplaying.entity.Query;
-import com.widdit.nowplaying.entity.SettingsGeneral;
-import com.widdit.nowplaying.entity.Track;
+import com.widdit.nowplaying.entity.*;
 import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
 import com.widdit.nowplaying.service.kugou.KuGouMusicService;
 import com.widdit.nowplaying.service.kuwo.KuWoMusicService;
@@ -12,6 +9,7 @@ import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.TimeUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.time.StopWatch;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,6 +18,7 @@ import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -29,6 +28,9 @@ public class NowPlayingService {
     private Player player = new Player();
     // 歌曲信息
     private Track track = new Track();
+
+    // 计时器
+    private StopWatch stopWatch = new StopWatch();
 
     // 前一个窗口标题
     private String prevWindowTitle = "";
@@ -59,7 +61,27 @@ public class NowPlayingService {
      * @return
      */
     public Query query() {
+        // 从计时器中实时获取进度条时间
+        int progressSec = Math.toIntExact(stopWatch.getTime(TimeUnit.SECONDS));
+        int duration = track.getDuration();
+
+        if (duration == 0) {  // 防止未知异常情况，不要除以 0 就行
+            duration = 5 * 60;
+        }
+
+        player.setSeekbarCurrentPosition(progressSec);
+        player.setSeekbarCurrentPositionHuman(TimeUtil.getFormattedDuration(progressSec));
+        player.setStatePercent((double) progressSec / duration);
+
         return new Query(player, track);
+    }
+
+    /**
+     * 返回进度条毫秒值
+     * @return
+     */
+    public QueryProgress queryProgress() {
+        return new QueryProgress(stopWatch.getTime());
     }
 
     /**
@@ -104,15 +126,16 @@ public class NowPlayingService {
         }
 
         if (windowTitle.equals(prevWindowTitle)) {  // 窗口标题不变（没切歌），无需查询歌曲信息
-            // 如果状态是播放中，则增加进度条秒数
+            // 如果状态是播放中，则增加进度条秒数；否则，暂停进度条
             if ("Playing".equals(status)) {
                 increaseSeekbar();
+            } else if ("Paused".equals(status)) {
+                pauseSeekbar();
             }
         } else {  // 窗口标题改变（切歌了），需要查询歌曲信息
             log.info("切换歌曲为：" + windowTitle);
-            player.setSeekbarCurrentPosition(0);
-            player.setSeekbarCurrentPositionHuman("0:00");
-            player.setStatePercent(0.0);
+            stopWatch.reset();
+            stopWatch.start();
 
             String platform = settings.getPlatform();
 
@@ -135,7 +158,7 @@ public class NowPlayingService {
                     track = neteaseMusicService.search(windowTitle);
                 }
             } catch (Exception e) {
-                log.info("获取失败");
+                log.error("获取失败");
                 track = Track.builder()
                         .author("")
                         .title("")
@@ -193,30 +216,33 @@ public class NowPlayingService {
         otherPlatforms.put("soda", "汽水音乐");
         otherPlatforms.put("huahua", "花花直播助手");
         otherPlatforms.put("musicfree", "MusicFree");
+        otherPlatforms.put("bq", "BQ点歌姬");
     }
 
     /**
-     * 让 player 对象的进度条的秒数加 1
+     * 进度条前进
      */
     private void increaseSeekbar() {
-        Integer progressSec = player.getSeekbarCurrentPosition();
-        Integer duration = track.getDuration();
-
-        if (duration == 0) {  // 防止未知异常情况，不要除以 0 就行
-            duration = 5 * 60;
+        if (stopWatch.isSuspended()) {
+            stopWatch.resume();
         }
+
+        int progressSec = Math.toIntExact(stopWatch.getTime(TimeUnit.SECONDS));
+        int duration = track.getDuration();
 
         if (progressSec >= duration) {  // 一般发生在单曲循环的情况下
-            player.setSeekbarCurrentPosition(0);
-            player.setSeekbarCurrentPositionHuman("0:00");
-            player.setStatePercent(0.0);
-            return;
+            stopWatch.reset();
+            stopWatch.start();
         }
+    }
 
-        progressSec++;
-        player.setSeekbarCurrentPosition(progressSec);
-        player.setSeekbarCurrentPositionHuman(TimeUtil.getFormattedDuration(progressSec));
-        player.setStatePercent((double) progressSec / duration);
+    /**
+     * 进度条暂停
+     */
+    private void pauseSeekbar() {
+        if (!stopWatch.isSuspended()) {
+            stopWatch.suspend();
+        }
     }
 
 }
