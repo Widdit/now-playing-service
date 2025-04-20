@@ -128,10 +128,12 @@ public class AppleMusicSMTC : MusicService
         if (Thumbnail == null)
             return;
 
+        IRandomAccessStreamWithContentType thumbnailStream = null;
+
         try
         {
             // 从流中读取封面图片
-            var thumbnailStream = Thumbnail.OpenReadAsync().GetAwaiter().GetResult();
+            thumbnailStream = Thumbnail.OpenReadAsync().GetAwaiter().GetResult();
             byte[] thumbnailBytes = new byte[thumbnailStream.Size];
             using (DataReader reader = new DataReader(thumbnailStream))
             {
@@ -145,6 +147,13 @@ public class AppleMusicSMTC : MusicService
             string filePath = "cover_base64.txt";
             File.WriteAllTextAsync(filePath, base64String).GetAwaiter().GetResult();
         }
-        catch (Exception) {}
+        catch (Exception)
+        {
+            // ignored
+        }
+        finally
+        {
+            thumbnailStream?.Dispose();
+        }
     }
 }

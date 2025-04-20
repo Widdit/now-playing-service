@@ -59,7 +59,8 @@ class Program
             { "foobar", (smtc) => smtc ? new FoobarSMTC() : new FoobarService() },
             { "lx", (smtc) => smtc ? new LxMusicSMTC() : new LxMusicService() },
             { "huahua", (smtc) => new HuaHuaLiveService() },
-            { "musicfree", (smtc) => smtc ? new MusicFreeSMTC() : new MusicFreeService() }
+            { "musicfree", (smtc) => smtc ? new MusicFreeSMTC() : new MusicFreeService() },
+            { "bq", (smtc) => new BQLivePlayerService() }
         };
 
         MusicService musicService;

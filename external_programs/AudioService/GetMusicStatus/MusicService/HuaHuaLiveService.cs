@@ -14,6 +14,7 @@ public class HuaHuaLiveService : MusicService
     private string artist = "";
     private bool paused = true;
     private bool webSocketConnected = false;
+    private string prevCoverUrl = "";
 
     public override void Init()
     {
@@ -144,7 +145,11 @@ public class HuaHuaLiveService : MusicService
             artist = artist.Replace("&", " / ");
 
             string coverUrl = song["cover"].ToString();
-            SaveThumbnail(coverUrl);
+            if (coverUrl != prevCoverUrl)
+            {
+                prevCoverUrl = coverUrl;
+                SaveThumbnail(coverUrl);
+            }
         }
         catch (Exception) {}
     }
@@ -166,8 +171,8 @@ public class HuaHuaLiveService : MusicService
                 string responseBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
                 // 解析 JSON 数据
-                JObject jsonObejct = JObject.Parse(responseBody);
-                paused = jsonObejct["data"]["paused"].Value<bool>();
+                JObject jsonObject = JObject.Parse(responseBody);
+                paused = jsonObject["data"]["paused"].Value<bool>();
             }
         }
         catch (Exception) {}

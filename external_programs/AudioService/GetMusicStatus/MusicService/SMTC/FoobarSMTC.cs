@@ -112,10 +112,12 @@ public class FoobarSMTC : MusicService
         if (Thumbnail == null)
             return;
 
+        IRandomAccessStreamWithContentType thumbnailStream = null;
+
         try
         {
             // 从流中读取封面图片
-            var thumbnailStream = Thumbnail.OpenReadAsync().GetAwaiter().GetResult();
+            thumbnailStream = Thumbnail.OpenReadAsync().GetAwaiter().GetResult();
             byte[] thumbnailBytes = new byte[thumbnailStream.Size];
             using (DataReader reader = new DataReader(thumbnailStream))
             {
@@ -129,7 +131,14 @@ public class FoobarSMTC : MusicService
             string filePath = "cover_base64.txt";
             File.WriteAllTextAsync(filePath, base64String).GetAwaiter().GetResult();
         }
-        catch (Exception) {}
+        catch (Exception)
+        {
+            // ignored
+        }
+        finally
+        {
+            thumbnailStream?.Dispose();
+        }
     }
 
     private double GetVolume(AudioSessionManager2 sessionManager)
@@ -137,8 +146,6 @@ public class FoobarSMTC : MusicService
         double volume = 0;
 
         AudioSessionEnumerator sessionEnumerator = sessionManager.GetSessionEnumerator();
-            
-        AudioSessionControl2 sessionControl;
 
         // 遍历所有会话，寻找匹配的进程
         foreach (AudioSessionControl session in sessionEnumerator)
@@ -148,20 +155,29 @@ public class FoobarSMTC : MusicService
                 continue;
             }
 
-            sessionControl = session.QueryInterface<AudioSessionControl2>();
+            AudioSessionControl2 sessionControl = session.QueryInterface<AudioSessionControl2>();
             if (sessionControl == null || sessionControl.Process == null)
             {
                 continue;
             }
 
             string processName = sessionControl.Process.ProcessName;
+            AudioMeterInformation meter = null;
 
             if (processName.StartsWith("foobar2000"))
             {
                 // Foobar2000 部分情况下会存在多个进程，因此不能 break，并且需要累加音量
-                volume += session.QueryInterface<AudioMeterInformation>().PeakValue;
+                meter = session.QueryInterface<AudioMeterInformation>();
+                volume += meter.PeakValue;
             }
+
+            // 释放对象
+            meter?.Dispose();
+            sessionControl?.Dispose();
+            session.Dispose();
         }
+
+        sessionEnumerator?.Dispose();
 
         return volume;
     }
