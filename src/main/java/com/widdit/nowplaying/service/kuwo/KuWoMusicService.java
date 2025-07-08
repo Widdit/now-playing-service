@@ -34,7 +34,7 @@ public class KuWoMusicService {
 
         // 检查响应数据
         if (!jsonObject.containsKey("abslist")) {
-            throw new RuntimeException("酷我音乐歌曲信息获取失败");
+            throw new RuntimeException("酷我音乐歌曲信息获取失败：响应数据异常");
         }
 
         // 提取所需字段

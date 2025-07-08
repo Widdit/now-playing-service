@@ -34,7 +34,7 @@ public class KuGouMusicService {
 
         // 检查响应数据的 code
         if (!jsonObject.containsKey("error_code") || jsonObject.getIntValue("error_code") != 0) {
-            throw new RuntimeException("酷狗音乐歌曲信息获取失败");
+            throw new RuntimeException("酷狗音乐歌曲信息获取失败：响应码错误");
         }
 
         // 提取所需字段

@@ -38,7 +38,7 @@ public class QQMusicService {
 
         // 检查响应数据的 code
         if (!jsonObject.containsKey("code") || jsonObject.getIntValue("code") != 0) {
-            throw new RuntimeException("QQ 音乐歌曲信息获取失败");
+            throw new RuntimeException("QQ 音乐歌曲信息获取失败：响应码错误");
         }
 
         // 提取所需字段
