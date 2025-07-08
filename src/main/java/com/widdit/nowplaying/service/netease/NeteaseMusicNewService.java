@@ -36,7 +36,7 @@ public class NeteaseMusicNewService {
      * @param keyword 关键词
      * @return
      */
-    public Track getTrackInfo(String keyword) throws IOException {
+    public Track getTrackInfo(String keyword) throws Exception {
         if (appVersion == null) {
             loadAppVersion();
         }

@@ -158,7 +158,7 @@ public class NowPlayingService {
                     track = neteaseMusicService.search(windowTitle);
                 }
             } catch (Exception e) {
-                log.error("获取失败");
+                log.error("获取失败：" + e.getMessage());
                 track = Track.builder()
                         .author("")
                         .title("")
@@ -169,6 +169,14 @@ public class NowPlayingService {
                         .url("https://music.youtube.com/watch?v=dQw4w9WgXcQ")
                         .build();
             } finally {
+                // Apple Music 的歌手名有时会包含专辑名，需要去除
+                if ("apple".equals(platform)) {
+                    int dashIndex = windowTitle.indexOf("—");
+                    if (dashIndex != -1) {
+                        windowTitle = windowTitle.substring(0, dashIndex);
+                    }
+                }
+
                 // 使用窗口标题去覆盖歌曲信息，保证歌名、歌手名和音乐软件中的完全一致
                 String pivot = " - ";
                 if (windowTitle.contains(pivot)) {

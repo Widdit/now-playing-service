@@ -1,7 +1,6 @@
 package com.widdit.nowplaying.service.netease;
 
 import com.widdit.nowplaying.entity.Lyric;
-import com.widdit.nowplaying.entity.ReqJsonObject;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.TimeUtil;
@@ -9,13 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.JSONArray;
-import org.jsoup.Connection;
-import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,7 +27,7 @@ public class NeteaseMusicService {
      * @param keyword 关键词
      * @return
      */
-    public Track search(String keyword) throws IOException {
+    public Track search(String keyword) throws Exception {
         // 网易云没有周杰伦版权，借用 QQ 音乐搜索
         if (keyword.contains("周杰伦") || keyword.contains("周杰倫")) {
             log.info("当前歌手为周杰伦，借用 QQ 音乐搜索");
@@ -41,22 +37,22 @@ public class NeteaseMusicService {
         log.info("获取网易云音乐歌曲信息..");
 
         // 封装请求参数对象
-        ReqJsonObject reqJsonObject = new ReqJsonObject();
-        reqJsonObject.set("s", keyword);
-        reqJsonObject.set("type", 1);
-        reqJsonObject.set("offset", 0);
-        reqJsonObject.set("limit", 2);
-        reqJsonObject.set("csrf_token", "");
+        Map<String, String> data = new HashMap<>();
+        data.put("s", keyword);
+        data.put("limit", "2");
+        data.put("offset", "0");
+        data.put("type", "1");
+        data.put("csrf_token", "");
 
         // 发送搜索歌曲请求
-        String respStr = sendPostRequest("https://music.163.com/weapi/search/get", reqJsonObject);
+        String respStr = EapiHelper.post("https://interface3.music.163.com/eapi/search/get", data);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
 
         // 检查响应数据的 code
         if (jsonObject == null || !jsonObject.containsKey("code") || jsonObject.getIntValue("code") != 200) {
-            throw new RuntimeException("网易云音乐歌曲信息获取失败");
+            throw new RuntimeException("网易云音乐歌曲信息获取失败：响应码错误");
         }
 
         // 提取所需字段
@@ -124,27 +120,27 @@ public class NeteaseMusicService {
      * @param id 歌曲 id
      * @return
      */
-    public String getCover(String id) throws IOException {
+    public String getCover(String id) throws Exception {
         // 封装请求参数对象
-        ReqJsonObject reqJsonObject = new ReqJsonObject();
-        reqJsonObject.set("id", id);
-        reqJsonObject.set("c", "[{\"id\":" + id + "}]");
-        reqJsonObject.set("ids", "[" + id + "]");
-        reqJsonObject.set("csrf_token", "");
+        Map<String, String> data = new HashMap<>();
+        data.put("id", id);
+        data.put("c", "[{\"id\":" + id + "}]");
+        data.put("ids", "[" + id + "]");
+        data.put("csrf_token", "");
 
-        // 发送搜索歌曲请求
-        String respStr = sendPostRequest("https://music.163.com/weapi/v3/song/detail", reqJsonObject);
+        // 发送获取歌曲详情请求
+        String respStr = EapiHelper.post("https://interface3.music.163.com/eapi/song/detail", data);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
 
         // 检查响应数据的 code
         if (!jsonObject.containsKey("code") || jsonObject.getIntValue("code") != 200) {
-            throw new RuntimeException("网易云音乐歌曲封面获取失败");
+            throw new RuntimeException("网易云音乐歌曲封面获取失败：响应码错误");
         }
 
         // 提取所需字段
-        String cover = jsonObject.getJSONArray("songs").getJSONObject(0).getJSONObject("al").getString("picUrl");
+        String cover = jsonObject.getJSONArray("songs").getJSONObject(0).getJSONObject("album").getString("picUrl");
         cover += "?param=500y500";  // 图片大小设置为 500*500
 
         return cover;
@@ -174,8 +170,6 @@ public class NeteaseMusicService {
         data.put("yrv", "0");
         data.put("csrf_token", "");
         String respStr = EapiHelper.post("https://interface3.music.163.com/eapi/song/lyric/v1", data);
-
-        // System.out.println(respStr);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
@@ -221,34 +215,6 @@ public class NeteaseMusicService {
         log.info("获取成功");
 
         return lyric;
-    }
-
-    /**
-     * 发送 POST 请求
-     * @param url 请求 URL
-     * @param reqJsonObject 请求参数对象
-     * @return 响应 JSON 字符串
-     * @throws IOException
-     */
-    private String sendPostRequest(String url, ReqJsonObject reqJsonObject) throws IOException {
-        Connection.Response
-                response = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:57.0) Gecko/20100101 Firefox/57.0")
-                .header("Accept", "*/*")
-                .header("Cache-Control", "no-cache")
-                .header("Connection", "keep-alive")
-                .header("Host", "music.163.com")
-                .header("Accept-Language", "zh-CN,en-US;q=0.7,en;q=0.3")
-                .header("DNT", "1")
-                .header("Pragma", "no-cache")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .data(CryptoUtil.getSecretData(reqJsonObject))
-                .method(Connection.Method.POST)
-                .ignoreContentType(true)
-                .timeout(10000)
-                .execute();
-
-        return response.body();
     }
 
 }
