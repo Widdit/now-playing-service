@@ -66,6 +66,11 @@ public class PageController {
         return "settings-desktop";
     }
 
+    @GetMapping("/settings/output")
+    public String settingsOutput() {
+        return "settings-output";
+    }
+
     @GetMapping("/404")
     public String state404() {
         return "404";

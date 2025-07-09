@@ -80,6 +80,7 @@ public class SettingsService {
 
             // 将 JSON 数据映射到 Settings 对象
             settings = jsonObject.toJavaObject(SettingsGeneral.class);
+
         } catch (Exception e) {
             log.error("加载 " + filePath + " 设置文件异常：" + e.getMessage());
         }

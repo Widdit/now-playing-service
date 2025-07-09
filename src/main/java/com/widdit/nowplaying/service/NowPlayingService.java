@@ -55,6 +55,8 @@ public class NowPlayingService {
     private KuWoMusicService kuWoMusicService;
     @Autowired
     private NeteaseMusicNewService neteaseMusicNewService;
+    @Autowired
+    private OutputService outputService;
 
     /**
      * 返回歌曲信息
@@ -192,6 +194,9 @@ public class NowPlayingService {
                     track.setAuthor(" ");
                 }
             }
+
+            // 输出歌曲信息
+            outputService.output(track);
         }
 
         prevWindowTitle = windowTitle;
