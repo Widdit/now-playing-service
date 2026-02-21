@@ -1,0 +1,1 @@
+import{r as t,ak as o}from"./index-Ct6JBOBo.js";function $(s,r){const e=t.useRef(!0),f=t.useRef(null);let u=o(s);t.useEffect(()=>(e.current=!0,()=>{e.current=!1}),[]),t.useEffect(()=>{let c=f.current;e.current?e.current=!1:(!c||r.some((a,n)=>!Object.is(a,c[n])))&&u(),f.current=r},r)}export{$};

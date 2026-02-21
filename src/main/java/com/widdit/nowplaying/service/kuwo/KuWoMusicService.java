@@ -1,7 +1,6 @@
 package com.widdit.nowplaying.service.kuwo;
 
 import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.TimeUtil;
@@ -9,12 +8,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 @Service
 @Slf4j
 public class KuWoMusicService {
+
+    // 缓存相关变量
+    private String prevKeyword;
+    private Track prevTrack;
+
+    // 锁对象
+    private final Object cacheLock = new Object();
 
     /**
      * 根据关键词搜索歌曲，返回歌曲信息对象
@@ -24,7 +33,33 @@ public class KuWoMusicService {
     public Track search(String keyword) throws IOException {
         log.info("获取酷我音乐歌曲信息..");
 
-        String url = "https://www.kuwo.cn/search/searchMusicBykeyWord?all=" + keyword + "&vipver=1&client=kt&ft=music&cluster=0&strategy=2012&encoding=utf8&rformat=json&mobi=1&issubtitle=1&show_copyright_off=1&pn=0&rn=2";
+        // 尝试从缓存获取 (加锁读取，保证读取到的是完整的一组数据)
+        synchronized (cacheLock) {
+            if (Objects.equals(keyword, prevKeyword) && prevTrack != null) {
+                log.info("命中歌曲缓存：" + keyword);
+                return prevTrack;
+            }
+        }
+
+        // 缓存未命中，执行网络请求逻辑
+        String url = UriComponentsBuilder
+                .fromHttpUrl("https://www.kuwo.cn/search/searchMusicBykeyWord")
+                .queryParam("all", keyword)
+                .queryParam("vipver", 1)
+                .queryParam("client", "kt")
+                .queryParam("ft", "music")
+                .queryParam("cluster", 0)
+                .queryParam("strategy", 2012)
+                .queryParam("encoding", "utf8")
+                .queryParam("rformat", "json")
+                .queryParam("mobi", 1)
+                .queryParam("issubtitle", 1)
+                .queryParam("show_copyright_off", 1)
+                .queryParam("pn", 0)
+                .queryParam("rn", 2)
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
 
         // 发送搜索歌曲请求
         String respStr = sendGetRequest(url);
@@ -34,7 +69,7 @@ public class KuWoMusicService {
 
         // 检查响应数据
         if (!jsonObject.containsKey("abslist")) {
-            throw new RuntimeException("酷我音乐歌曲信息获取失败：响应数据异常");
+            throw new RuntimeException("酷我音乐歌曲信息获取失败，响应数据异常（" + respStr + "）");
         }
 
         // 提取所需字段
@@ -74,6 +109,12 @@ public class KuWoMusicService {
                 .build();
 
         log.info("获取成功");
+
+        // 更新缓存 (加锁写入)
+        synchronized (cacheLock) {
+            this.prevKeyword = keyword;
+            this.prevTrack = track;
+        }
 
         return track;
     }

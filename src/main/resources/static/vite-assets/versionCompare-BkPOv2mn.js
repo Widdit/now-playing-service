@@ -1,0 +1,1 @@
+const c="2.0.0";function f(o,i,a){let r=o.split("."),e=i.split(".");const n=t=>/^\d+$/.test(t);if(!r.every(n)||!e.every(n))return NaN;r=r.map(Number),e=e.map(Number);for(let t=0;t<r.length;++t){if(e.length===t)return 1;const s=r[t],p=e[t];if(s!==p)return s>p?1:-1}return r.length!==e.length?-1:0}export{c as C,f as v};

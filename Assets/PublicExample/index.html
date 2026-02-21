@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iOS 歌曲组件 | Now Playing</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/nowplaying.ico" />
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="unselectable">
+  <div class="player-container" id="player">
+    <!-- 信息区域：专辑封面、歌曲信息、音频波形 -->
+    <div class="info-section">
+      <div class="cover-wrapper">
+        <img id="album-cover" src="">
+      </div>
+
+      <div class="text-wrapper">
+        <div id="track-title" class="title">
+          <div class="title-scroller" id="title-scroller">
+            <span>Nothing Playing</span>
+          </div>
+        </div>
+        <div id="track-artist" class="artist"></div>
+      </div>
+
+      <div class="waveform-wrapper">
+        <canvas id="waveform-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- 进度条区域：当前时间、进度条、剩余时间 -->
+    <div class="progress-section">
+      <span id="time-current" class="time-text">0:00</span>
+      <div class="progress-bar-bg">
+        <div id="progress-fill" class="progress-bar-fill"></div>
+      </div>
+      <span id="time-remaining" class="time-text">-0:00</span>
+    </div>
+
+    <!-- 控制按钮区域：上一首、播放/暂停、下一首 -->
+    <div class="controls-section">
+      <img src="assets/icon_rewind.svg" class="control-icon">
+      <img id="play-pause-btn" src="assets/icon_play.svg" class="control-icon">
+      <img src="assets/icon_forward.svg" class="control-icon">
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

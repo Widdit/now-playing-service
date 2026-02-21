@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta
+			name="viewport"
+			content="width=device-width,height=device-height initial-scale=1" />
+	<title>歌曲组件 | Now Playing</title>
+	<link rel="icon" type="image/svg+xml" href="/assets/nowplaying.ico" />
+	<script type="module" crossorigin src="/assets/index-4783303a.js"></script>
+	<script src="/assets/jquery.min.js"></script>
+	<script src="/assets/jquery-ui.min.js"></script>
+	<link rel="stylesheet" href="/assets/index-ef1a3273.css">
+	<style>
+		body {
+			overflow: hidden;
+		}
+
+		.hidden {
+			display: none;
+		}
+
+		@media (max-width: 640px) {
+			.faq-text {
+				margin-left: 0 !important;
+			}
+		}
+
+		#preview-iframe {
+			pointer-events: none;
+			width: 100%;
+			height: 100%;
+		}
+
+		#preview-div {
+			z-index: 998;
+			position: absolute;
+			right: 0;
+			bottom: 0;
+		}
+
+		#preview-div:hover {
+			cursor: grab;
+		}
+
+		@media (max-width: 1022px) {
+			#preview-div {
+				display: none;
+			}
+		}
+	</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="preview-div">
+	<iframe id="preview-iframe"></iframe>
+</div>
+
+<script>
+	$(document).ready(function() {
+		var profileId = "";
+		var playerId = 0;
+
+		const previewWidths = [600, 750, 320, 500, 480, 580];
+		const previewHeights = [220, 170, 420, 270, 260, 240];
+
+		var $previewIframe = $('#preview-iframe');
+		var $previewDiv = $("#preview-div");
+		var isPreviewing = true;
+
+		// 修改预览窗口的 CSS 属性
+		document.getElementById('preview-iframe').onload = function() {
+			var previewIframe = document.getElementById('preview-iframe').contentDocument;
+
+			var songInfoElement = previewIframe.querySelector('#songinfo');
+
+			if (songInfoElement) {
+				songInfoElement.style.overflow = 'clip';
+			}
+		};
+
+		// 加载预览窗口
+		function loadPreviewIframe() {
+			$previewDiv.hide();
+
+			$previewDiv.css({
+				width: previewWidths[playerId],
+				height: previewHeights[playerId],
+			});
+
+			$previewIframe.attr('src', `/widget/${profileId}`);
+
+			if (isPreviewing) {
+				$previewDiv.fadeIn(800);
+			}
+
+			// 重新限制拖动范围
+			$previewDiv.draggable("option", "containment", [0, 0, $(window).width() - previewWidths[playerId], $(window).height() - previewHeights[playerId]]);
+		}
+
+		// 监听配置项 profileId 的改变事件
+		document.addEventListener('profileIdChanged', function(event) {
+			profileId = event.detail;
+		});
+
+		// 监听配置项 playerId 的改变事件
+		document.addEventListener('playerIdChanged', function(event) {
+			playerId = event.detail;
+			loadPreviewIframe();
+		});
+
+		// 预览按钮的悬停和点击事件
+		var $previewBtn = $('#preview-btn');
+		$previewBtn.hover(
+				function () { $previewBtn.css('background-color', '#464955'); },
+				function () { $previewBtn.css('background-color', '#30323b'); });
+		$previewBtn.click(function () {
+			if ($(this).text() === '关闭预览') {
+				isPreviewing = false;
+				$previewBtn.text('开启预览');
+				$previewBtn.css('background-color', '#f87171');
+				$previewDiv.fadeOut(300);
+				setTimeout(function () {
+					$previewBtn.css('background-color', '#30323b');
+				}, 400);
+			} else {
+				isPreviewing = true;
+				$previewBtn.text('关闭预览');
+				$previewBtn.css('background-color', '#1db954');
+				loadPreviewIframe();
+				setTimeout(function () {
+					$previewBtn.css('background-color', '#30323b');
+				}, 400);
+			}
+		});
+
+		// 使得预览窗口可拖动
+		$previewDiv.draggable({
+			start: function() {
+				$(this).css("cursor", "grabbing");
+			},
+			stop: function() {
+				$(this).css("cursor", "grab");
+			}
+		});
+
+		// 页面最下方添加空白区域
+		setTimeout(function () {
+			$('.bottom-0.left-0.right-0.top-0.box-border.grid.gap-6').append(`
+			<div style="height: 160px"></div>
+		`);
+		}, 200);
+	});
+</script>
+</body>
+</html>

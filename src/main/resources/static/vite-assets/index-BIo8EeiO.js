@@ -1,0 +1,1 @@
+import{cr as a,cp as t,cU as e}from"./index-Ct6JBOBo.js";const n=new Set(["opacity","clipPath","filter","transform"]);class r extends a{constructor(){super(...arguments),this.isEnabled=!1}add(s){(t.has(s)||n.has(s))&&(this.isEnabled=!0,this.update())}update(){this.set(this.isEnabled?"transform":"auto")}}function u(){return e(()=>new r("auto"))}export{r as W,n as a,u};

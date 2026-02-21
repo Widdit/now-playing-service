@@ -7,6 +7,7 @@ import com.widdit.nowplaying.entity.SettingsOutput;
 import com.widdit.nowplaying.entity.Track;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.io.FileOutputStream;
@@ -53,7 +54,8 @@ public class OutputService {
      * - custom.txt 自定义输出
      * @param track 歌曲信息对象
      */
-    public void output(Track track) {
+    @Async
+    public void outputAsync(Track track) {
         // 如果 Outputs 目录不存在，则创建
         Path outputDir = Paths.get("Outputs");
         if (!Files.exists(outputDir)) {
@@ -95,18 +97,21 @@ public class OutputService {
 
         writeSettingsOutput(settingsOutput);
 
-        log.info("修改输出模板成功");
+        log.info("修改输出设置成功");
     }
 
     /**
      * 恢复默认输出设置对象
+     * @return
      */
-    public void resetSettingsOutput() {
+    public SettingsOutput resetSettingsOutput() {
         settingsOutput = new SettingsOutput();
 
         writeSettingsOutput(settingsOutput);
 
-        log.info("恢复默认输出模板成功");
+        log.info("恢复默认输出设置成功");
+
+        return settingsOutput;
     }
 
     /**

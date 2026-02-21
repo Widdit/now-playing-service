@@ -3,7 +3,7 @@ package com.widdit.nowplaying.service;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.widdit.nowplaying.entity.SettingsGeneral;
-import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
+import com.widdit.nowplaying.event.SettingsGeneralChangedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -50,7 +50,7 @@ public class SettingsService {
         log.info("修改通用设置成功");
 
         // 发布事件，通知变化
-        eventPublisher.publishEvent(new SettingsGeneralChangeEvent(this, "通用设置被修改"));
+        eventPublisher.publishEvent(new SettingsGeneralChangedEvent(this, "通用设置被修改"));
     }
 
     /**
@@ -80,6 +80,12 @@ public class SettingsService {
 
             // 将 JSON 数据映射到 Settings 对象
             settings = jsonObject.toJavaObject(SettingsGeneral.class);
+
+            // 如有字段异常，则进行修正
+            if (settings.getUpdateCheckFreq() > 7 || settings.getUpdateCheckFreq() < 0) {
+                settings.setUpdateCheckFreq(7);
+                writeSettings(settings);
+            }
 
         } catch (Exception e) {
             log.error("加载 " + filePath + " 设置文件异常：" + e.getMessage());

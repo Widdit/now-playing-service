@@ -4,5 +4,20 @@
         <name>GetMusicStatus</name>
     </assembly>
     <members>
+        <member name="M:WindowDetector.GetWindowTitleByHandle(System.IntPtr)">
+            <summary>
+            通过窗口句柄获取窗口标题（使用 Unicode，避免编码问题）
+            </summary>
+        </member>
+        <member name="M:WindowDetector.GetWindowTitle(System.String)">
+            <summary>
+            获取指定进程的主窗口标题（Unicode）
+            </summary>
+        </member>
+        <member name="M:WindowDetector.GetWindowTitles(System.String)">
+            <summary>
+            获取指定进程的所有窗口标题（Unicode）
+            </summary>
+        </member>
     </members>
 </doc>

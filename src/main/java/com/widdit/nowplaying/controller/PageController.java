@@ -6,16 +6,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class PageController {
 
-    @GetMapping("/")
-    public String root() {
-        return "index";
-    }
-
-    @GetMapping("/index.html")
-    public String index() {
-        return "index";
-    }
-
     @GetMapping("/widget")
     public String widget() {
         return "widget";
@@ -32,28 +22,8 @@ public class PageController {
     }
 
     @GetMapping("/widget-widdit/*")
-    public String widgetWithProfileWiddit() {
+    public String widgetWidditWithProfile() {
         return "widget-widdit";
-    }
-
-    @GetMapping("/widget-green")
-    public String widgetGreen() {
-        return "widget-green";
-    }
-
-    @GetMapping("/widget-green/*")
-    public String widgetWithProfileGreen() {
-        return "widget-green";
-    }
-
-    @GetMapping("/settings")
-    public String settings() {
-        return "settings-general";
-    }
-
-    @GetMapping("/settings/general")
-    public String settingsGeneral() {
-        return "settings-general";
     }
 
     @GetMapping("/settings/widget")
@@ -61,29 +31,16 @@ public class PageController {
         return "settings-widget";
     }
 
-    @GetMapping("/settings/desktop")
-    public String settingsDesktop() {
-        return "settings-desktop";
-    }
-
-    @GetMapping("/settings/output")
-    public String settingsOutput() {
-        return "settings-output";
-    }
-
-    @GetMapping("/404")
-    public String state404() {
-        return "404";
-    }
-
-    @GetMapping("/lyric")
-    public String lyric() {
-        return "lyric";
-    }
-
-    @GetMapping("/lyric/1")
-    public String lyric1() {
-        return "lyric-1";
+    /**
+     * 捕获所有其它路由
+     * 排除 /api、/assets、/vite-assets、/public
+     */
+    @GetMapping({
+            "/",
+            "/{path:^(?!api|assets|vite-assets|public).*}/**"
+    })
+    public String index() {
+        return "index";
     }
 
 }

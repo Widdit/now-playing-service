@@ -1,0 +1,241 @@
+/* 全局样式重置 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* 根元素字体大小过渡 */
+html {
+  transition: font-size 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 页面主体布局 */
+body {
+  background-color: transparent;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  font-family: 'Arial', sans-serif;
+}
+
+/* 禁止文本选择 */
+.unselectable {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  cursor: default;
+}
+
+/* 禁止图片拖拽 */
+.unselectable img {
+  -webkit-user-drag: none;
+}
+
+/* 播放器容器 */
+.player-container {
+  width: 28rem; 
+  height: 13rem;
+  background-color: #000000;
+  border-radius: 2.5rem;
+  padding: 1.8rem;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  box-shadow: 0 1rem 3rem rgba(0,0,0,0.5);
+  opacity: 1;
+  transition: width 0.6s cubic-bezier(0.25, 0.8, 0.25, 1), 
+              height 0.6s cubic-bezier(0.25, 0.8, 0.25, 1),
+              opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 信息区域布局 */
+.info-section {
+  display: flex;
+  align-items: center;
+  height: 4.5rem;
+  gap: 1rem;
+}
+
+/* 专辑封面容器 */
+.cover-wrapper {
+  width: 4.5rem;
+  height: 4.5rem;
+  flex-shrink: 0;
+  border-radius: 0.8rem;
+  overflow: hidden;
+  background-color: transparent;
+  box-shadow: 0 0.2rem 0.8rem rgba(0,0,0,0.3);
+}
+
+/* 专辑封面图片 */
+.cover-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease; 
+  opacity: 0;
+}
+
+/* 专辑封面图片加载成功后的状态 */
+.cover-wrapper img.loaded {
+  opacity: 1;
+}
+
+/* 歌曲文字信息容器 */
+.text-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 歌名样式 */
+.title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 0.1rem;
+  white-space: nowrap;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+/* 歌名滚动时的渐变遮罩 */
+.title.is-scrolling {
+  mask-image: linear-gradient(90deg, transparent 0%, black 3%, black 97%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 3%, black 97%, transparent 100%);
+}
+
+/* 歌名滚动容器 */
+.title-scroller {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+/* 歌名文字右侧间距 */
+.title-scroller span {
+  padding-right: 2rem; 
+}
+
+/* 歌名滚动动画状态 */
+.title-scroller.animate {
+  animation: scroll-linear linear infinite;
+}
+
+/* 歌名滚动动画关键帧 */
+@keyframes scroll-linear {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* 歌手名样式 */
+.artist {
+  font-size: 1rem;
+  color: #88858b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 音频波形容器 */
+.waveform-wrapper {
+  height: 1.4rem; 
+  width: 2.2rem;  
+  flex-shrink: 0;
+  position: relative;
+  border-radius: 0.3rem;
+  overflow: hidden;
+  opacity: 0.9;
+}
+
+/* 音频波形画布 */
+#waveform-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 进度条区域布局 */
+.progress-section {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.8rem;
+}
+
+/* 时间文字基础样式 */
+.time-text {
+  font-size: 0.8rem;
+  color: #b0b0b0;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5rem;
+}
+
+/* 当前播放时间 */
+#time-current {
+  margin-left: 0.2rem;
+}
+
+/* 剩余播放时间 */
+#time-remaining {
+  text-align: right;
+}
+
+/* 进度条背景轨道 */
+.progress-bar-bg {
+  flex: 1;
+  height: 0.4rem;
+  background-color: #242626;
+  border-radius: 0.2rem;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 进度条已播放填充 */
+.progress-bar-fill {
+  height: 100%;
+  width: 0%; 
+  background-color: #88858b;
+  border-radius: 0.2rem 0 0 0.2rem; 
+  transition: width 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); 
+}
+
+/* 控制按钮区域布局 */
+.controls-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2.5rem;
+  margin-top: 0.8rem;
+}
+
+/* 控制按钮基础样式 */
+.control-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  opacity: 1;
+  filter: brightness(0) invert(1);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+}
+
+/* 控制按钮动画 */
+.control-icon.animating {
+  transform: scale(0.4); 
+  opacity: 0.2;
+}
+
+/* 播放/暂停按钮 */
+#play-pause-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+}

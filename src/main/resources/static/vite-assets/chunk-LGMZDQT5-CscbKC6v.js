@@ -1,0 +1,1 @@
+import{c1 as o}from"./index-Ct6JBOBo.js";function i(n,r){if(n!=null){if(o(n)){n(r);return}try{n.current=r}catch{throw new Error(`Cannot assign value '${r}' to ref '${n}'`)}}}function s(...n){return r=>{n.forEach(t=>i(t,r))}}export{s as m};
