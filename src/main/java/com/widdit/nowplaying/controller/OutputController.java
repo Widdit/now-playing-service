@@ -38,8 +38,8 @@ public class OutputController {
      * 恢复默认输出设置
      */
     @GetMapping("/api/settings/output/reset")
-    public void settingsOutputReset() {
-        outputService.resetSettingsOutput();
+    public SettingsOutput settingsOutputReset() {
+        return outputService.resetSettingsOutput();
     }
 
 }

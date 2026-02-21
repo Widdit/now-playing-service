@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta
+			name="viewport"
+			content="width=device-width,height=device-height initial-scale=1" />
+	<title>Now Playing 歌曲组件</title>
+	<link rel="icon" type="image/svg+xml" href="/assets/nowplaying.ico" />
+	<script type="module" crossorigin src="/assets/index-4783303a.js"></script>
+	<script type="module" crossorigin src="/assets/hls.js"></script>
+	<script src="/assets/jquery.min.js"></script>
+	<link rel="stylesheet" href="/assets/index-ef1a3273.css">
+	<style>
+		.hidden {
+			display: none;
+		}
+	</style>
+</head>
+<body>
+	<div id="root"></div>
+
+<script>
+	$(document).ready(function() {
+		async function querySettings() {
+			var prevSettings = {};
+			var currSettings = {};
+
+			const currentPath = window.location.pathname;
+			var reqPath = "/widgets/amuse/settings";
+			if (currentPath.includes("/widget/")) {
+				// 提取最后一个斜杠右边的字符串
+				const lastSlashIndex = currentPath.lastIndexOf("/");
+				const profileId = currentPath.substring(lastSlashIndex + 1);
+				reqPath = "/widgets/amuse/settings?id=" + profileId;
+			}
+
+			try {
+				prevSettings = await $.ajax({ url: reqPath, method: 'GET' });
+			} catch (error) {
+				console.error('Error fetching settings:', error);
+			}
+
+			// 如果封面类型为 "动态封面"，则渲染视频
+			if (prevSettings.settings.cover === 0 && prevSettings.settings.player !== 4) {
+				setTimeout(function handleVideoCover() {
+					// 检查页面有没有渲染出来
+					var songTitleElement = document.getElementById('song-title');
+
+					if (!songTitleElement) {
+						setTimeout(handleVideoCover, 500);  // 递归调用自己
+						return;
+					}
+
+					const callback_songTitle = function(mutationsList, observer) {
+						var songTitle = $('#song-title').text().trim();
+						var songAuthor = $('#song-author').text().trim();
+
+						console.log("切换歌曲为：" + songTitle + " - " + songAuthor);
+
+						// 查询动态封面需要一定时间，因此在拿到 videoUrl 之前先显示新歌曲的静态封面（隐藏动态封面）
+						$('#cover-video').attr('src', '');
+
+						$.ajax({
+							url: "/cover/videoUrl",
+							type: "POST",
+							contentType: "application/json",
+							data: JSON.stringify({
+								songTitle: songTitle,
+								songAuthor: songAuthor
+							}),
+							success: function(videoUrl) {
+								if (videoUrl) {
+									var coverVideo = document.getElementById('cover-video');
+
+									if (Hls.isSupported()) {
+										const hls = new Hls();
+										hls.loadSource(videoUrl);
+										hls.attachMedia(coverVideo);
+									} else {
+										console.error('HLS is not supported in this browser.');
+									}
+								}
+							},
+							error: function(xhr, status, error) {
+								console.log("Request failed: " + error);
+							}
+						});
+					};
+
+					// 当歌曲标题改变时，请求动态封面
+					const observer_songTitle = new MutationObserver(callback_songTitle);
+					observer_songTitle.observe(songTitleElement, { characterData: true, subtree: true });
+
+					// 首次载入页面也请求动态封面
+					callback_songTitle();
+				}, 500);
+			}
+
+			async function checkNewSettings() {
+				try {
+					currSettings = await $.ajax({ url: reqPath, method: 'GET' });
+				} catch (error) {
+					console.error('Error fetching settings:', error);
+				}
+
+				// 设置更新了
+				if (JSON.stringify(currSettings) !== JSON.stringify(prevSettings)) {
+					prevSettings = currSettings;
+					// 刷新当前页面
+					location.reload();
+				}
+			}
+
+			// 每隔 1 秒检查设置有没有更新
+			setInterval(checkNewSettings, 1000);
+		}
+
+		querySettings();
+	});
+</script>
+</body>
+</html>

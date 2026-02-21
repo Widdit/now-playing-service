@@ -19,7 +19,11 @@ import java.security.MessageDigest;
 import java.util.*;
 
 /**
- * 改写自 https://github.com/WXRIW/Lyricify-Lyrics-Helper/blob/master/Lyricify.Lyrics.Helper/Providers/Web/Netease/EapiHelper.cs
+ * 原作者：WXRIW
+ * 代码链接：https://github.com/WXRIW/Lyricify-Lyrics-Helper/blob/master/Lyricify.Lyrics.Helper/Providers/Web/Netease/EapiHelper.cs
+ * Licensed under the Apache License, Version 2.0
+ *
+ * 修改者：Widdit
  */
 public class EapiHelper {
     private static final String userAgent = "Mozilla/5.0 (Linux; Android 9; PCT-AL10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.64 HuaweiBrowser/10.0.3.311 Mobile Safari/537.36";

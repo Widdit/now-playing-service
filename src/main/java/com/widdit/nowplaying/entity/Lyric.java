@@ -14,6 +14,15 @@ public class Lyric {
     // 歌词来源（netease 或 qq）
     private String source = "netease";
 
+    // 歌名
+    private String title = "";
+
+    // 歌手名
+    private String author = "";
+
+    // 时长（秒）
+    private Integer duration = 0;
+
     // 是否有歌词
     private Boolean hasLyric = false;
 
@@ -24,12 +33,12 @@ public class Lyric {
     private Boolean hasKaraokeLyric = false;
 
     // 歌词
-    private String lrc;
+    private String lrc = "";
 
     // 翻译歌词
-    private String translatedLyric;
+    private String translatedLyric = "";
 
     // 逐词歌词
-    private String karaokeLyric;
+    private String karaokeLyric = "";
 
 }

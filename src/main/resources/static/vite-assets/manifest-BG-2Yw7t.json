@@ -1,0 +1,16 @@
+{
+  "short_name": "Now Playing",
+  "name": "Now Playing",
+  "description": "Now Playing 播放器",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

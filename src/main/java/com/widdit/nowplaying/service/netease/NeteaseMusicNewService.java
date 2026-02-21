@@ -6,10 +6,10 @@ import com.alibaba.fastjson.JSONObject;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.TimeUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -25,7 +25,6 @@ public class NeteaseMusicNewService {
     private final String userHome = System.getProperty("user.home");
 
     private String appVersion;
-    private long prevPlaytime = 0;
     private long prevModifiedTime = 0;
 
     @Autowired
@@ -47,7 +46,7 @@ public class NeteaseMusicNewService {
 
         try {
             if (appVersion.startsWith("3.")) {  // 新版网易云
-                track = getCurrentTrackV3();
+                track = getCurrentTrackV3(keyword);
             } else if (appVersion.startsWith("2.")) {  // 旧版网易云
                 track = getCurrentTrackV2();
             } else {
@@ -56,7 +55,7 @@ public class NeteaseMusicNewService {
             log.info("获取成功");
 
         } catch (Exception e) {
-            log.error("读取网易云音乐本地文件获取歌曲信息时出错：" + e.getMessage());
+            log.warn("读取网易云音乐本地文件获取歌曲信息时出错：" + e.getMessage());
             log.info("使用传统方案查询");
             track = neteaseMusicService.search(keyword);
         }
@@ -66,9 +65,10 @@ public class NeteaseMusicNewService {
 
     /**
      * 新版网易云获取当前正在播放的歌曲信息
+     * @param keyword 关键词
      * @return
      */
-    private Track getCurrentTrackV3() throws Exception {
+    private Track getCurrentTrackV3(String keyword) throws Exception {
         String filePath = userHome + "\\AppData\\Local\\NetEase\\CloudMusic\\Library\\webdb.dat";
 
         Connection conn = null;
@@ -91,46 +91,45 @@ public class NeteaseMusicNewService {
                 throw new RuntimeException("webdb.dat 数据库文件中没有最近播放歌曲的记录");
             }
 
-            // 为防止网易云本地文件没来得及更新，判断这条记录是否和上次相同，如果相同则等待 500 毫秒再次判断，最多尝试 2 次
-            long playtime = rs.getLong("playtime");
+            // 为防止网易云本地文件没来得及更新，判断这条记录是否和当前歌曲一致，如果不一致则等待 100 毫秒再次判断。总共判断 15 次
+            JSONObject jsonObject = null;
+            String title = "";
+            for (int i = 0; i < 15; i++) {
+                String jsonStr = rs.getString("jsonStr");
+                jsonObject = JSONObject.parseObject(jsonStr);
 
-            for (int i = 0; i < 2; i++) {
-                if (playtime != prevPlaytime) {
+                title = jsonObject.getString("name");
+
+                // 查询到的记录与当前歌曲一致
+                if (!StringUtils.isBlank(title) && keyword.contains(title)) {
                     break;
                 }
 
                 rs.close();
-                Thread.sleep(500);
+                Thread.sleep(100);
 
                 rs = statement.executeQuery(sql);
                 rs.next();
-
-                playtime = rs.getLong("playtime");
             }
 
-            if (playtime == prevPlaytime) {
+            if (StringUtils.isBlank(title) || !keyword.contains(title)) {
                 throw new RuntimeException("webdb.dat 文件中的数据未及时更新");
             }
-            prevPlaytime = playtime;
-
-            String jsonStr = rs.getString("jsonStr");
-            JSONObject jsonObject = JSONObject.parseObject(jsonStr);
 
             String id = jsonObject.getString("id");
             Integer duration = jsonObject.getInteger("duration") / 1000;
-            String title = jsonObject.getString("name");
             String album = jsonObject.getJSONObject("album").getString("name");
             String cover = jsonObject.getJSONObject("album").getString("picUrl");
             cover += "?param=500y500";  // 图片大小设置为 500*500
 
             JSONArray artistsArray = jsonObject.getJSONArray("artists");
-            String author = "";
+            StringBuilder author = new StringBuilder();
             for (int i = 0; i < artistsArray.size(); i++) {
                 JSONObject artist = artistsArray.getJSONObject(i);
                 if (i > 0) {
-                    author += " / ";
+                    author.append(" / ");
                 }
-                author += artist.getString("name");
+                author.append(artist.getString("name"));
             }
 
             // 计算出格式化的时长
@@ -138,7 +137,7 @@ public class NeteaseMusicNewService {
 
             // 封装歌曲对象
             Track track = Track.builder()
-                    .author(author)
+                    .author(author.toString())
                     .title(title)
                     .album(album)
                     .cover(cover)

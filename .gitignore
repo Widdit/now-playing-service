@@ -1,12 +1,18 @@
+# Directories
+.idea/
 **/target/
-.idea
-*.iml
-*.class
-*Test.java
 **/test/
 **/setup/
 **/Settings/
-/src/main/resources/static/
-/src/main/resources/templates/
-/Assets/cover_base64.txt
 **/Outputs/
+**/Public/
+/Plugins/now-playing-cam/
+
+# Files
+*.iml
+*.class
+*Test.java
+*.log
+/src/main/resources/static/assets/index-4783303a.js
+/src/main/resources/static/assets/index-ef1a3273.css
+/Assets/cover_base64.txt

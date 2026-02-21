@@ -9,7 +9,7 @@ public class WindowDetector
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
-    [DllImport("user32.dll", SetLastError = true)]
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -24,6 +24,24 @@ public class WindowDetector
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+    /// <summary>
+    /// 通过窗口句柄获取窗口标题（使用 Unicode，避免编码问题）
+    /// </summary>
+    public static string GetWindowTitleByHandle(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return string.Empty;
+
+        int length = GetWindowTextLength(hWnd);
+        if (length <= 0) return string.Empty;
+
+        StringBuilder sb = new StringBuilder(length + 1);
+        GetWindowText(hWnd, sb, sb.Capacity);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 获取指定进程的主窗口标题（Unicode）
+    /// </summary>
     public static string GetWindowTitle(string processName)
     {
         string windowTitle = "";
@@ -44,7 +62,7 @@ public class WindowDetector
                     if (string.Equals(procName, processName, StringComparison.OrdinalIgnoreCase))
                     {
                         found = true;
-                        windowTitle = Process.GetProcessById((int)processId).MainWindowTitle;
+                        windowTitle = GetWindowTitleByHandle(hWnd);
                         return false;  // Stop enumerating
                     }
                 }
@@ -57,10 +75,16 @@ public class WindowDetector
         return windowTitle;
     }
 
+    /// <summary>
+    /// 获取指定进程的所有窗口标题（Unicode）
+    /// </summary>
     public static List<string> GetWindowTitles(string processName)
     {
         List<string> windowTitles = new List<string>();
-        uint targetProcessId = (uint)Process.GetProcessesByName(processName)[0].Id;
+        Process[] processes = Process.GetProcessesByName(processName);
+        if (processes.Length == 0) return windowTitles;
+
+        uint targetProcessId = (uint)processes[0].Id;
 
         EnumWindows(new EnumWindowsProc((hWnd, lParam) =>
         {
@@ -69,10 +93,7 @@ public class WindowDetector
 
             if (pid == targetProcessId)
             {
-                StringBuilder sb = new StringBuilder(256);
-                GetWindowText(hWnd, sb, sb.Capacity);
-                string title = sb.ToString();
-
+                string title = GetWindowTitleByHandle(hWnd);
                 if (!string.IsNullOrWhiteSpace(title))
                 {
                     windowTitles.Add(title);

@@ -1,14 +1,18 @@
 package com.widdit.nowplaying.service;
 
 import com.widdit.nowplaying.entity.Device;
+import com.widdit.nowplaying.entity.RespData;
 import com.widdit.nowplaying.entity.SettingsGeneral;
 import com.widdit.nowplaying.entity.cmd.Args;
 import com.widdit.nowplaying.entity.cmd.Option;
-import com.widdit.nowplaying.event.SettingsGeneralChangeEvent;
+import com.widdit.nowplaying.event.MusicStatusUpdatedEvent;
+import com.widdit.nowplaying.event.SettingsGeneralChangedEvent;
 import com.widdit.nowplaying.util.ConsoleUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -20,16 +24,22 @@ import java.util.List;
 @Slf4j
 public class AudioService {
 
+    @Autowired
+    private SettingsService settingsService;
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
     // 当前播放状态（Playing, Paused, None）
     private String status = "None";
     // 当前窗口标题
     private String windowTitle = "";
 
+    // 首选音乐平台是否正在运行
+    private boolean primaryPlatformRunning = true;
+
     private Process getMusicStatusProcess;
     private Thread musicStatusReaderThread;
-
-    @Autowired
-    private SettingsService settingsService;
+    private Thread processShutdownHook;
 
     /**
      * 初始化操作。该方法会在该类实例被 Spring 创建时自动执行
@@ -39,6 +49,18 @@ public class AudioService {
         startGetMusicStatus();
     }
 
+    public String getStatus() {
+        return status;
+    }
+
+    public String getWindowTitle() {
+        return windowTitle;
+    }
+
+    public boolean getPrimaryPlatformRunning() {
+        return primaryPlatformRunning;
+    }
+
     /**
      * 启动 C# 程序 GetMusicStatus.exe 不断更新音乐状态（成员变量 status 和 windowTitle）
      */
@@ -46,10 +68,16 @@ public class AudioService {
         // 封装命令行参数
         SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
 
+        String platform = settingsGeneral.getPlatform();
+        if (settingsGeneral.getFallbackPlatformEnabled() && !primaryPlatformRunning) {
+            platform = settingsGeneral.getFallbackPlatform();
+        }
+
         List<Option> options = new ArrayList<>();
         options.add(new Option("--device-id", settingsGeneral.getDeviceId()));
-        options.add(new Option("--platform", settingsGeneral.getPlatform()));
+        options.add(new Option("--platform", platform));
         options.add(new Option("--smtc", settingsGeneral.getSmtc().toString()));
+        options.add(new Option("--poll-interval", settingsGeneral.getPollInterval().toString()));
         Args args = new Args(options);
 
         List<String> command = ConsoleUtil.getCommand("Assets\\AudioService\\GetMusicStatus.exe", args);
@@ -60,6 +88,19 @@ public class AudioService {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             processBuilder.directory(new File("Assets"));  // 指定工作目录为 Assets
             getMusicStatusProcess = processBuilder.start();
+
+            // 为了防止并发问题，在 Hook 内部使用局部变量捕获当前的进程对象
+            final Process currentProc = getMusicStatusProcess;
+
+            processShutdownHook = new Thread(() -> {
+                // 这里检查 currentProc 而不是成员变量，确保只处理本次启动的进程
+                if (currentProc != null && currentProc.isAlive()) {
+                    currentProc.destroyForcibly();
+                    log.info("Java 主程序退出，已清理 GetMusicStatus.exe 进程");
+                }
+            });
+
+            Runtime.getRuntime().addShutdownHook(processShutdownHook);
 
             log.info("启动 C# 进程读取音乐状态");
 
@@ -77,9 +118,14 @@ public class AudioService {
                         } else {
                             windowTitle = line.trim();
                         }
+
+                        // 发布事件，通知变化
+                        eventPublisher.publishEvent(new MusicStatusUpdatedEvent(this, "音乐状态被更新"));
                     }
                 } catch (Exception e) {
-                    log.error("启用线程读取 C# 程序 GetMusicStatus.exe 失败：" + e.getMessage());
+                    if (getMusicStatusProcess != null && getMusicStatusProcess.isAlive()) {
+                        log.error("启用线程读取 C# 程序 GetMusicStatus.exe 失败：" + e.getMessage());
+                    }
                 }
             });
             musicStatusReaderThread.start();
@@ -96,15 +142,77 @@ public class AudioService {
         log.info("终止 C# 进程读取音乐状态");
 
         try {
-            if (getMusicStatusProcess != null) {
-                getMusicStatusProcess.destroy();  // 结束 C# 程序
+            // 移除 Shutdown Hook
+            if (processShutdownHook != null) {
+                try {
+                    // 如果手动停止了程序，就不需要在 Java 退出时再运行这个钩子了
+                    Runtime.getRuntime().removeShutdownHook(processShutdownHook);
+                } catch (IllegalStateException e) {
+                    // 如果 JVM 已经在关闭过程中，移除钩子可能会抛出异常，这里忽略即可
+                }
+                processShutdownHook = null;
             }
 
+            // 结束 C# 程序
+            if (getMusicStatusProcess != null) {
+                getMusicStatusProcess.destroy();
+            }
+
+            // 停止读取线程
             if (musicStatusReaderThread != null) {
-                musicStatusReaderThread.interrupt();  // 停止读取线程
+                musicStatusReaderThread.interrupt();
             }
         } catch (Exception e) {
             log.error("终止 C# 程序 GetMusicStatus.exe 失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 定时任务，用于更新首选音乐平台的运行状态
+     * 每隔 5 秒执行一次
+     */
+    @Scheduled(cron = "0/5 * * * * ?")
+    public void checkPrimaryPlatform() {
+        SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
+
+        boolean fallbackPlatformEnabled = settingsGeneral.getFallbackPlatformEnabled();
+        String platform = settingsGeneral.getPlatform();
+        String fallbackPlatform = settingsGeneral.getFallbackPlatform();
+
+        // 如果未启用备选音乐平台，则无需执行
+        if (!fallbackPlatformEnabled) {
+            return;
+        }
+
+        List<Option> options = new ArrayList<>();
+        options.add(new Option("--platform", platform));
+        Args args = new Args(options);
+
+        // 执行 C# 程序 CheckMusicProcess.exe
+        try {
+            String stdOut = ConsoleUtil.runGetStdOut("Assets\\AudioService\\CheckMusicProcess.exe", args);
+            boolean newPrimaryPlatformRunning = stdOut.contains("true");
+
+            if (newPrimaryPlatformRunning != primaryPlatformRunning) {
+                primaryPlatformRunning = newPrimaryPlatformRunning;
+
+                if (newPrimaryPlatformRunning) {
+                    log.info("检测到首选音乐平台已运行，开始识别首选音乐平台：" + platform);
+                } else {
+                    log.info("检测到首选音乐平台已关闭，开始识别备选音乐平台：" + fallbackPlatform);
+                }
+
+                // 重启 GetMusicStatus 进程，并清空播放状态和窗口标题
+                stopGetMusicStatus();
+
+                status = "None";
+                windowTitle = "";
+
+                startGetMusicStatus();
+            }
+
+        } catch (Exception e) {
+            log.error("执行 C# 程序 CheckMusicProcess.exe 失败：" + e.getMessage());
         }
     }
 
@@ -113,7 +221,7 @@ public class AudioService {
      * @param event
      */
     @EventListener
-    public void handleSettingsGeneralChange(SettingsGeneralChangeEvent event) {
+    public void handleSettingsGeneralChange(SettingsGeneralChangedEvent event) {
         // 如果通用设置被修改，则重启 GetMusicStatus 进程，并清空播放状态和窗口标题
         stopGetMusicStatus();
 
@@ -150,12 +258,29 @@ public class AudioService {
         return devices;
     }
 
-    public String getStatus() {
-        return status;
-    }
+    /**
+     * 获取音频设备识别结果
+     * @param platform 音乐平台
+     * @return
+     */
+    public RespData<String> deviceDetect(String platform) {
+        if (platform == null || "".equals(platform)) {
+            return new RespData<>("Fail! 缺少 platform 请求参数");
+        }
 
-    public String getWindowTitle() {
-        return windowTitle;
+        List<Option> options = new ArrayList<>();
+        options.add(new Option("--platform", platform));
+        Args args = new Args(options);
+
+        // 执行 C# 程序 DeviceDetect.exe
+        String stdOut = "";
+        try {
+            stdOut = ConsoleUtil.runGetStdOut("Assets\\AudioService\\DeviceDetect.exe", args);
+        } catch (Exception e) {
+            stdOut = "Fail! " + e.getMessage();
+        }
+
+        return new RespData<>(stdOut);
     }
 
 }

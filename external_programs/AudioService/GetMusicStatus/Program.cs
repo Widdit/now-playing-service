@@ -6,8 +6,8 @@ using System.Collections.Generic;
 using System.Threading;
 
 /*
-    检测音乐软件的播放状态（Playing, Paused, None）、歌曲信息
-    每隔 1 秒输出一次
+    检测音乐软件的播放状态（Playing, Paused, None）、歌曲信息。
+    输出条件：当播放状态变化（播放/暂停、切歌）时，立即输出；此外，即使状态无变化，每秒也输出一次。
     输出格式：
     "
         播放状态
@@ -17,10 +17,13 @@ using System.Threading;
         --device-id  音频设备 ID。仅检测该音频设备，默认值为 "default"，检测默认音频设备。
         --platform  音乐平台。期望检测的音乐软件平台，默认值为 "netease"，检测网易云音乐。
         --smtc  是否优先使用 SMTC。默认值为 true，优先通过 SMTC 识别歌曲信息。
+        --poll-interval  轮询间隔（ms）。建议取值范围为 100~1000 ms，默认值为 100 ms（最快）。
 */
 class Program
 {
-    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true)
+    private const int HEARTBEAT_INTERVAL_MS = 1000;
+
+    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -41,7 +44,7 @@ class Program
         }
         catch (Exception)
         {
-            Console.WriteLine("None");
+            Console.WriteLine($"Failed to get AudioSessionManager. Device ID: {deviceId}");
             return;
         }
 
@@ -54,13 +57,18 @@ class Program
             { "soda", (smtc) => new SodaMusicSMTC() },
             { "spotify", (smtc) => smtc ? new SpotifyMusicSMTC() : new SpotifyMusicService() },
             { "apple", (smtc) => smtc ? new AppleMusicSMTC() : new AppleMusicService() },
-            { "ayna", (smtc) => smtc ? new AynaLivePlayerSMTC() : new AynaLivePlayerService() },
+            { "ayna", (smtc) => new AynaLivePlayerService() },
             { "potplayer", (smtc) => smtc ? new PotPlayerSMTC() : new PotPlayerService() },
             { "foobar", (smtc) => smtc ? new FoobarSMTC() : new FoobarService() },
             { "lx", (smtc) => smtc ? new LxMusicSMTC() : new LxMusicService() },
             { "huahua", (smtc) => new HuaHuaLiveService() },
             { "musicfree", (smtc) => smtc ? new MusicFreeSMTC() : new MusicFreeService() },
-            { "bq", (smtc) => new BQLivePlayerService() }
+            { "bq", (smtc) => new BQLivePlayerService() },
+            { "aimp", (smtc) => smtc ? new AIMPSMTC() : new AIMPService() },
+            { "youtube", (smtc) => new YouTubeMusicSMTC() },
+            { "miebo", (smtc) => new MieboService() },
+            { "yesplay", (smtc) => new YesPlayMusicService() },
+            { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
         };
 
         MusicService musicService;
@@ -75,11 +83,37 @@ class Program
         }
 
         musicService.Init();
+
+        string prevOutput = "";
+
+        Stopwatch globalTimer = Stopwatch.StartNew();
+        long lastHeartbeatTime = 0; // 记录上次心跳的时间点
         
+        // 不断轮询音乐状态
         while (true)
         {
-            musicService.PrintMusicStatus(sessionManager);
-            Thread.Sleep(1000);
+            string currentOutput = musicService.GetMusicStatus(sessionManager);
+
+            // 判断状态是否改变
+            bool statusChanged = currentOutput != prevOutput;
+            
+            // 计算当前时间与上次心跳时间的差值
+            long currentTime = globalTimer.ElapsedMilliseconds;
+            bool heartbeatDue = (currentTime - lastHeartbeatTime) >= HEARTBEAT_INTERVAL_MS;
+
+            // 判断是否需要输出
+            if (statusChanged || heartbeatDue)
+            {
+                Console.WriteLine(currentOutput);
+                prevOutput = currentOutput;
+
+                if (heartbeatDue)
+                {
+                    lastHeartbeatTime = currentTime; 
+                }
+            }
+
+            Thread.Sleep(pollInterval);
         }
     }
 
