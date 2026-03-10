@@ -71,6 +71,10 @@ public class NowPlayingService {
         // 从计时器中实时获取进度条时间
         int progressSec = Math.toIntExact(stopWatch.getTime(TimeUnit.SECONDS));
         int duration = track.getDuration();
+        // mac
+        // long progressMs = getCurrentProgressMs();
+        // int progressSec = Math.toIntExact(progressMs / 1000);
+        // int duration = getCurrentDurationSec();
 
         // 防止未知异常情况，不要除以 0 就行
         if (duration <= 0) {
@@ -152,7 +156,7 @@ public class NowPlayingService {
             try {
                 if ("netease".equals(platform)) {
                     // 网易云音乐较为特殊，它实际上不支持 SMTC，但是能够读取本地数据库文件来获取歌曲信息
-                    if (settings.getSmtc()) {
+                    if (settings.getSmtc() && !audioService.isMacMode()) {
                         track = neteaseMusicNewService.getTrackInfo(windowTitle);
                     } else {
                         track = neteaseMusicService.search(windowTitle);
@@ -185,6 +189,17 @@ public class NowPlayingService {
                 String[] parseResult = SongUtil.parseWindowTitle(windowTitle);
                 track.setTitle(parseResult[0]);
                 track.setAuthor(parseResult[1]);
+
+                if (audioService.isMacMode()) {
+                    if (audioService.getAlbum() != null && !audioService.getAlbum().isEmpty()) {
+                        track.setAlbum(audioService.getAlbum());
+                    }
+                    if (audioService.getDurationMs() > 0) {
+                        int durationSec = Math.max(1, audioService.getDurationMs() / 1000);
+                        track.setDuration(durationSec);
+                        track.setDurationHuman(TimeUtil.getFormattedDuration(durationSec));
+                    }
+                }
             }
 
             // 发布事件，通知变化
@@ -204,7 +219,7 @@ public class NowPlayingService {
      * @return
      */
     public QueryProgress queryProgress() {
-        return new QueryProgress(stopWatch.getTime());
+        return new QueryProgress(getCurrentProgressMs());
     }
 
     /**
@@ -213,8 +228,9 @@ public class NowPlayingService {
      */
     public Player queryPlayer() {
         // 从计时器中实时获取进度条时间
-        int progressSec = Math.toIntExact(stopWatch.getTime(TimeUnit.SECONDS));
-        int duration = track.getDuration();
+        long progressMs = getCurrentProgressMs();
+        int progressSec = Math.toIntExact(progressMs / 1000);
+        int duration = getCurrentDurationSec();
 
         // 防止未知异常情况，不要除以 0 就行
         if (duration <= 0) {
@@ -319,6 +335,20 @@ public class NowPlayingService {
         if (stopWatch.isStarted() && !stopWatch.isStopped() && !stopWatch.isSuspended()) {
             stopWatch.suspend();
         }
+    }
+
+    private long getCurrentProgressMs() {
+        if (audioService.isMacMode() && audioService.getDurationMs() > 0) {
+            return Math.max(0L, audioService.getProgressMs());
+        }
+        return stopWatch.getTime();
+    }
+
+    private int getCurrentDurationSec() {
+        if (audioService.isMacMode() && audioService.getDurationMs() > 0) {
+            return Math.max(1, audioService.getDurationMs() / 1000);
+        }
+        return track.getDuration();
     }
 
 
