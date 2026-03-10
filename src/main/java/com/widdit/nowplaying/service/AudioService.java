@@ -1,5 +1,7 @@
 package com.widdit.nowplaying.service;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.widdit.nowplaying.entity.Device;
 import com.widdit.nowplaying.entity.RespData;
 import com.widdit.nowplaying.entity.SettingsGeneral;
@@ -19,6 +21,9 @@ import javax.annotation.PostConstruct;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+
+import static java.lang.Thread.sleep;
 
 @Service
 @Slf4j
@@ -33,6 +38,12 @@ public class AudioService {
     private String status = "None";
     // 当前窗口标题
     private String windowTitle = "";
+    // 当前播放进度（毫秒）
+    private long progressMs = 0L;
+    // 当前歌曲时长（毫秒）
+    private int durationMs = 0;
+    // 当前专辑名
+    private String album = "";
 
     // 首选音乐平台是否正在运行
     private boolean primaryPlatformRunning = true;
@@ -57,6 +68,22 @@ public class AudioService {
         return windowTitle;
     }
 
+    public long getProgressMs() {
+        return progressMs;
+    }
+
+    public int getDurationMs() {
+        return durationMs;
+    }
+
+    public String getAlbum() {
+        return album;
+    }
+
+    public boolean isMacMode() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac");
+    }
+
     public boolean getPrimaryPlatformRunning() {
         return primaryPlatformRunning;
     }
@@ -65,6 +92,11 @@ public class AudioService {
      * 启动 C# 程序 GetMusicStatus.exe 不断更新音乐状态（成员变量 status 和 windowTitle）
      */
     public void startGetMusicStatus() {
+        if (isMacMode()) {
+            startMacNowPlaying();
+            return;
+        }
+
         // 封装命令行参数
         SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
 
@@ -135,6 +167,125 @@ public class AudioService {
         }
     }
 
+    private void startMacNowPlaying() {
+        final String helperBin = resolveMintMacNpBin();
+        if (helperBin == null) {
+            log.error("未找到 mint-mac-np，可通过环境变量 MINT_MAC_NP_BIN 指定路径");
+            return;
+        }
+
+        final SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
+        final String configuredPlatform = settingsGeneral.getPlatform();
+        final String provider = configuredPlatform == null || configuredPlatform.isEmpty() ? "netease" : configuredPlatform;
+
+        log.info("启动 mint-mac-np 读取音乐状态：{}", helperBin);
+
+        musicStatusReaderThread = new Thread(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                Process process = null;
+                try {
+                    ProcessBuilder processBuilder = new ProcessBuilder(helperBin, "--provider", provider);
+                    process = processBuilder.start();
+                    getMusicStatusProcess = process;
+
+                    StringBuilder stdOut = new StringBuilder();
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            stdOut.append(line);
+                        }
+                    }
+
+                    process.waitFor();
+                    getMusicStatusProcess = null;
+
+                    if (process.exitValue() != 0 || stdOut.length() == 0) {
+                        updateMacState(null);
+                    } else {
+                        updateMacState(JSON.parseObject(stdOut.toString()));
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    log.error("读取 mint-mac-np 失败：{}", e.getMessage());
+                    updateMacState(null);
+                } finally {
+                    if (process != null && process.isAlive()) {
+                        process.destroyForcibly();
+                    }
+                }
+
+                try {
+                    sleep(250);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }, "mint-mac-np-reader");
+
+        musicStatusReaderThread.start();
+    }
+
+    private void updateMacState(JSONObject payload) {
+        if (payload == null || !payload.getBooleanValue("ok")) {
+            status = "None";
+            windowTitle = "";
+            progressMs = 0L;
+            durationMs = 0;
+            album = "";
+            eventPublisher.publishEvent(new MusicStatusUpdatedEvent(this, "mac 音乐状态被更新"));
+            return;
+        }
+
+        String title = payload.getString("title");
+        String artist = payload.getString("artist");
+        album = payload.getString("album") == null ? "" : payload.getString("album").trim();
+        progressMs = payload.getLongValue("position_ms");
+        durationMs = payload.getIntValue("duration_ms");
+        boolean isPlaying = payload.getBooleanValue("is_playing");
+
+        title = title == null ? "" : title.trim();
+        artist = artist == null ? "" : artist.trim();
+
+        if (title.isEmpty() && artist.isEmpty()) {
+            status = "None";
+            windowTitle = "";
+        } else {
+            status = isPlaying ? "Playing" : "Paused";
+            windowTitle = artist.isEmpty() ? title : title + " - " + artist;
+        }
+
+        eventPublisher.publishEvent(new MusicStatusUpdatedEvent(this, "mac 音乐状态被更新"));
+    }
+
+    private String resolveMintMacNpBin() {
+        String envPath = System.getenv("MINT_MAC_NP_BIN");
+        if (envPath != null && !envPath.trim().isEmpty()) {
+            File file = new File(envPath.trim());
+            if (file.isFile()) {
+                return file.getAbsolutePath();
+            }
+        }
+
+        String[] candidates = new String[] {
+                "mint-mac-np",
+                "../server/mint/mint_mac_np/target/release/mint-mac-np",
+                "../../server/mint/mint_mac_np/target/release/mint-mac-np",
+                "server/mint/mint_mac_np/target/release/mint-mac-np"
+        };
+
+        for (String candidate : candidates) {
+            File file = new File(candidate);
+            if (file.isFile()) {
+                return file.getAbsolutePath();
+            }
+        }
+
+        return null;
+    }
+
     /**
      * 结束 C# 程序 GetMusicStatus.exe
      */
@@ -173,6 +324,10 @@ public class AudioService {
      */
     @Scheduled(cron = "0/5 * * * * ?")
     public void checkPrimaryPlatform() {
+        if (isMacMode()) {
+            return;
+        }
+
         SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
 
         boolean fallbackPlatformEnabled = settingsGeneral.getFallbackPlatformEnabled();
@@ -236,6 +391,12 @@ public class AudioService {
      * @return
      */
     public List<Device> getAudioDevices() {
+        if (isMacMode()) {
+            List<Device> devices = new ArrayList<>();
+            devices.add(new Device("default", "macOS 默认音频设备"));
+            return devices;
+        }
+
         // 执行 C# 程序 GetAudioDevices.exe
         String stdOut = "";
         try {
@@ -264,6 +425,10 @@ public class AudioService {
      * @return
      */
     public RespData<String> deviceDetect(String platform) {
+        if (isMacMode()) {
+            return new RespData<>("Fail! macOS 模式下不支持 DeviceDetect.exe");
+        }
+
         if (platform == null || "".equals(platform)) {
             return new RespData<>("Fail! 缺少 platform 请求参数");
         }
