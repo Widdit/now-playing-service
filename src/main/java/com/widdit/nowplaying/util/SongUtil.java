@@ -2,12 +2,21 @@ package com.widdit.nowplaying.util;
 
 public class SongUtil {
 
+    // 全民K歌窗口标题前缀
+    private static final String WESING_PREFIX = "全民K歌 - ";
+
     /**
      * 将窗口标题解析为单独的歌名和歌手名
      * @param windowTitle 窗口标题
      * @return 字符串数组，第一个元素是歌名，第二个元素是歌手名
      */
     public static String[] parseWindowTitle(String windowTitle) {
+        // 全民K歌窗口标题格式: "全民K歌 - {歌曲名}"，无歌手名
+        if (windowTitle.startsWith(WESING_PREFIX)) {
+            String songName = windowTitle.substring(WESING_PREFIX.length()).trim();
+            return new String[] {songName, ""};
+        }
+
         String pivot = " - ";
         String title;
         String author;

@@ -30,9 +30,13 @@ public class AudioService {
     private ApplicationEventPublisher eventPublisher;
 
     // 当前播放状态（Playing, Paused, None）
-    private String status = "None";
+    private volatile String status = "None";
     // 当前窗口标题
-    private String windowTitle = "";
+    private volatile String windowTitle = "";
+    // 当前播放进度（秒），由 C# 端通过 Progress 行传递，-1 表示无进度
+    private volatile int progressSeconds = -1;
+    // 当前歌曲总时长（秒），由 C# 端通过 Progress 行传递，-1 表示无进度
+    private volatile int totalSeconds = -1;
 
     // 首选音乐平台是否正在运行
     private boolean primaryPlatformRunning = true;
@@ -55,6 +59,14 @@ public class AudioService {
 
     public String getWindowTitle() {
         return windowTitle;
+    }
+
+    public int getProgressSeconds() {
+        return progressSeconds;
+    }
+
+    public int getTotalSeconds() {
+        return totalSeconds;
     }
 
     public boolean getPrimaryPlatformRunning() {
@@ -115,6 +127,21 @@ public class AudioService {
                         // 更新成员变量
                         if ("Playing".equals(line) || "Paused".equals(line) || "None".equals(line)) {
                             status = line.trim();
+                            // 状态为 None 时，清空窗口标题和进度，防止关闭播放窗口后歌词继续播放
+                            if ("None".equals(status)) {
+                                windowTitle = "";
+                                progressSeconds = -1;
+                                totalSeconds = -1;
+                            }
+                        } else if (line.startsWith("Progress:")) {
+                            // 解析 C# 端传递的精确进度，格式: "Progress:currentSec|totalSec"
+                            try {
+                                String[] parts = line.substring(9).split("\\|");
+                                progressSeconds = Integer.parseInt(parts[0]);
+                                totalSeconds = Integer.parseInt(parts[1]);
+                            } catch (Exception e) {
+                                log.debug("解析 Progress 行失败: {}", line);
+                            }
                         } else {
                             windowTitle = line.trim();
                         }
@@ -153,9 +180,9 @@ public class AudioService {
                 processShutdownHook = null;
             }
 
-            // 结束 C# 程序
+            // 结束 C# 程序（使用 destroyForcibly 确保 Windows 上能杀死进程）
             if (getMusicStatusProcess != null) {
-                getMusicStatusProcess.destroy();
+                getMusicStatusProcess.destroyForcibly();
             }
 
             // 停止读取线程
@@ -165,6 +192,14 @@ public class AudioService {
         } catch (Exception e) {
             log.error("终止 C# 程序 GetMusicStatus.exe 失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * Spring 容器销毁时清理 C# 子进程
+     */
+    @javax.annotation.PreDestroy
+    public void cleanup() {
+        stopGetMusicStatus();
     }
 
     /**
@@ -207,6 +242,8 @@ public class AudioService {
 
                 status = "None";
                 windowTitle = "";
+                progressSeconds = -1;
+                totalSeconds = -1;
 
                 startGetMusicStatus();
             }
@@ -227,6 +264,8 @@ public class AudioService {
 
         status = "None";
         windowTitle = "";
+        progressSeconds = -1;
+        totalSeconds = -1;
 
         startGetMusicStatus();
     }

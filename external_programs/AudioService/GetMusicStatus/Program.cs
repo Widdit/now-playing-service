@@ -27,6 +27,20 @@ class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
 
+        // 启动守护线程：当父进程退出（stdin 关闭）时，自动退出本进程
+        var parentWatchThread = new Thread(() =>
+        {
+            try
+            {
+                // stdin 被关闭时 Read() 返回 -1，说明父进程已退出
+                while (Console.In.Read() != -1) { }
+            }
+            catch { }
+            Environment.Exit(0);
+        });
+        parentWatchThread.IsBackground = true;
+        parentWatchThread.Start();
+
         AudioSessionManager2 sessionManager;
 
         try
@@ -69,6 +83,7 @@ class Program
             { "miebo", (smtc) => new MieboService() },
             { "yesplay", (smtc) => new YesPlayMusicService() },
             { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
+            { "kg", (smtc) => new WeSingService() },
         };
 
         MusicService musicService;

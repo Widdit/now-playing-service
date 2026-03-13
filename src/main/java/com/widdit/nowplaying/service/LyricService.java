@@ -10,6 +10,7 @@ import com.widdit.nowplaying.event.LyricChangedEvent;
 import com.widdit.nowplaying.event.TrackChangedEvent;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
+import com.widdit.nowplaying.service.kg.KGLocalService;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,8 @@ public class LyricService {
     private NeteaseMusicService neteaseMusicService;
     @Autowired
     private QQMusicService qqMusicService;
+    @Autowired
+    private KGLocalService kgLocalService;
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
@@ -159,13 +162,29 @@ public class LyricService {
             return newLyric;
         }
 
+        // 歌词源为全民K歌时，无论是否开启智能匹配，都优先读取本地缓存歌词
+        if ("kg".equals(source)) {
+            try {
+                Lyric localLyric = kgLocalService.getLocalLyric(windowTitle);
+                if (localLyric != null && localLyric.getHasLyric()) {
+                    log.info("使用全民K歌本地缓存歌词");
+                    return localLyric;
+                }
+                log.info("全民K歌本地无歌词，退化为在线获取");
+            } catch (Exception e) {
+                log.warn("读取全民K歌本地歌词失败: {}", e.getMessage());
+            }
+        }
+
         if (autoSelectBestLyric) {
             // 智能匹配最佳歌词
             newLyric = selectBestLyric(source, windowTitle);
         } else {
             // 获取指定平台的歌词
             try {
-                if ("qq".equals(source)) {  // 歌词源为 QQ 音乐
+                if ("kg".equals(source)) {  // 歌词源为全民K歌（本地已无缓存，使用 QQ 音乐在线歌词）
+                    newLyric = qqMusicService.getLyric(windowTitle);
+                } else if ("qq".equals(source)) {  // 歌词源为 QQ 音乐
                     newLyric = qqMusicService.getLyric(windowTitle);
                 } else {  // 歌词源为网易云音乐（默认）
                     if (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫")) {
@@ -439,6 +458,35 @@ public class LyricService {
         }
 
         return lyric;
+    }
+
+    /**
+     * 强制刷新歌词（由 KGLocalService WatchService 调用）
+     * 清除缓存标记，重新获取歌词并发布事件
+     */
+    public void forceRefreshLyric() {
+        if (!fetchLyricEnabled) {
+            return;
+        }
+
+        fetchLock.lock();
+        try {
+            String windowTitle = audioService.getWindowTitle();
+            if (windowTitle == null || windowTitle.isEmpty()) {
+                return;
+            }
+
+            log.info("强制刷新歌词（WatchService 触发）: {}", windowTitle);
+
+            // 清除缓存标记，强制重新获取
+            this.currentLyricWindowTitle = null;
+            this.lyric = fetchLyric(windowTitle);
+            this.currentLyricWindowTitle = windowTitle;
+
+            eventPublisher.publishEvent(new LyricChangedEvent(this, "歌词发生改变"));
+        } finally {
+            fetchLock.unlock();
+        }
     }
 
     /**
