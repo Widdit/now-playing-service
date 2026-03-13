@@ -27,7 +27,8 @@ namespace ProcessChecker
             { "youtube", "youtube-music-desktop-app" },
             { "miebo", "咩播" },
             { "yesplay", "YesPlayMusic" },
-            { "cider", "Cider" }
+            { "cider", "Cider" },
+            { "kg", "WeSing" }
         };
 
         static void Main(string platform = "netease")

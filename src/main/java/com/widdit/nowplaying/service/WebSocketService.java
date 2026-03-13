@@ -5,6 +5,7 @@ import com.widdit.nowplaying.entity.WebSocketMessage;
 import com.widdit.nowplaying.event.LyricChangedEvent;
 import com.widdit.nowplaying.event.PlayerPauseStateChangedEvent;
 import com.widdit.nowplaying.event.PlayerProgressReplayEvent;
+import com.widdit.nowplaying.event.PlayerProgressSyncEvent;
 import com.widdit.nowplaying.event.TrackChangedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +66,15 @@ public class WebSocketService {
     @EventListener
     public void handlePlayerProgressReplay(PlayerProgressReplayEvent event) {
         WebSocketMessage message = new WebSocketMessage("PlayerProgressReplay", nowPlayingService.queryProgress());
+        WebSocketLyricController.sendToAllClients(message);
+    }
+
+    /**
+     * 监听进度同步事件（kg 平台每秒同步 C# 端的实际进度到前端）
+     */
+    @EventListener
+    public void handlePlayerProgressSync(PlayerProgressSyncEvent event) {
+        WebSocketMessage message = new WebSocketMessage("PlayerProgress", nowPlayingService.queryProgress());
         WebSocketLyricController.sendToAllClients(message);
     }
 
