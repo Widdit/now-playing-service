@@ -33,7 +33,7 @@ public class NeteaseMusicService : MusicService
                 string processName = sessionControl.Process.ProcessName;
                 AudioMeterInformation meter = null;
 
-                if (processName.StartsWith("cloudmusic") || processName.StartsWith("CloudMusic"))
+                if (processName.Contains("cloudmusic") || processName.Contains("CloudMusic"))
                 {
 					// 网易云音乐会存在多个进程，因此不能 break，并且需要累加音量
                     musicAppRunning = true;

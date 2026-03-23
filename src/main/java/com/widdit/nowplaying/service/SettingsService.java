@@ -86,6 +86,11 @@ public class SettingsService {
                 settings.setUpdateCheckFreq(7);
                 writeSettings(settings);
             }
+            if (settings.getWeSingCachePath() == null || settings.getWeSingCachePath().isBlank()) {
+                String defaultPath = System.getProperty("user.home") + "\\AppData\\Roaming\\Tencent\\WeSing\\WeSingCache";
+                settings.setWeSingCachePath(defaultPath);
+                writeSettings(settings);
+            }
 
         } catch (Exception e) {
             log.error("加载 " + filePath + " 设置文件异常：" + e.getMessage());

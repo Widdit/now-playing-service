@@ -1070,6 +1070,18 @@ public class SongMatchingUtil {
                 "Unity (Jack Remix)", "The Fat Rat",
                 "不同的人Remix", false);
 
+        // 测试组16: 本地无歌手名，云端有歌手名
+        printTestGroup("测试组16: 本地无歌手名，云端有歌手名");
+        testMatch("稻香", "",
+                "稻香", "周杰伦",
+                "本地无歌手名，云端有歌手名", true);
+        testMatch("Die For You", "",
+                "Die For You", "The Weeknd",
+                "本地无歌手名，云端有歌手名", true);
+        testMatch("Die For You", "",
+                "Die For You", "The Weeknd / Jack",
+                "本地无歌手名，云端有多个歌手名", true);
+
         return new int[]{passCount, totalCount};
     }
 

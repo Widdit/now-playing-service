@@ -11,8 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class Lyric {
 
-    // 歌词来源（netease 或 qq）
-    private String source = "netease";
+    // 歌词来源（netease、qq 、...）
+    private String source = "";
 
     // 歌名
     private String title = "";

@@ -4,6 +4,32 @@
         <name>GetMusicStatus</name>
     </assembly>
     <members>
+        <member name="M:WeSingService.FindWeSingWindow">
+            <summary>
+            查找全民K歌播放窗口的 IUIAutomationElement（标题为 "全民K歌 - {歌曲名}" 的窗口）
+            </summary>
+        </member>
+        <member name="M:WeSingService.ParseProgress(Interop.UIAutomationClient.IUIAutomationElement,System.Int32@,System.Int32@)">
+            <summary>
+            从 UI Automation 树中解析进度文本 (格式: "00:08 | 04:16")
+            </summary>
+        </member>
+        <member name="M:WeSingService.TryParseProgressText(System.String,System.Int32@,System.Int32@)">
+            <summary>
+            解析进度文本，支持 "MM:SS | MM:SS" 和 "MM:SS|MM:SS" 格式
+            </summary>
+        </member>
+        <member name="M:WeSingService.TryParseTimeString(System.String,System.Int32@)">
+            <summary>
+            解析 "MM:SS" 格式的时间字符串为秒数
+            </summary>
+        </member>
+        <member name="M:WeSingService.DetermineStatus(System.Int32)">
+            <summary>
+            通过进度变化判断播放状态
+            如果进度在变化 → Playing；如果进度停滞 → Paused
+            </summary>
+        </member>
         <member name="M:WindowDetector.GetWindowTitleByHandle(System.IntPtr)">
             <summary>
             通过窗口句柄获取窗口标题（使用 Unicode，避免编码问题）

@@ -14,6 +14,7 @@
           "Newtonsoft.Json": "13.0.3",
           "System.CommandLine.DragonFruit": "0.4.0-alpha.22272.1",
           "System.Drawing.Common": "9.0.0",
+          "Interop.UIAutomationClient": "10.0.19041.0",
           "runtimepack.Microsoft.NETCore.App.Runtime.win-x64": "8.0.11",
           "runtimepack.Microsoft.Windows.SDK.NET.Ref": "10.0.26100.53"
         },
@@ -896,6 +897,14 @@
             "fileVersion": "9.0.24.52901"
           }
         }
+      },
+      "Interop.UIAutomationClient/10.0.19041.0": {
+        "runtime": {
+          "Interop.UIAutomationClient.dll": {
+            "assemblyVersion": "10.0.19041.0",
+            "fileVersion": "10.0.19041.0"
+          }
+        }
       }
     }
   },
@@ -991,6 +1000,11 @@
       "sha512": "sha512-uoozjI3+dlgKh2onFJcz8aNLh6TRCPlLSh8Dbuljc8CdvqXrxHOVysJlrHvlsOCqceqGBR1wrMPxlnzzhynktw==",
       "path": "system.drawing.common/9.0.0",
       "hashPath": "system.drawing.common.9.0.0.nupkg.sha512"
+    },
+    "Interop.UIAutomationClient/10.0.19041.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
     }
   },
   "runtimes": {

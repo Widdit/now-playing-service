@@ -10,7 +10,7 @@ import com.widdit.nowplaying.event.LyricChangedEvent;
 import com.widdit.nowplaying.event.TrackChangedEvent;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
-import com.widdit.nowplaying.service.kg.KGLocalService;
+import com.widdit.nowplaying.service.wesing.WeSingService;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +40,7 @@ public class LyricService {
     @Autowired
     private QQMusicService qqMusicService;
     @Autowired
-    private KGLocalService kgLocalService;
+    private WeSingService weSingService;
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
@@ -152,7 +152,7 @@ public class LyricService {
         String source = settingsCommon.getLyricSource();
         boolean autoSelectBestLyric = settingsCommon.getAutoSelectBestLyric();
 
-        // 获取播放状态和窗口标题
+        // 获取播放状态
         String status = audioService.getStatus();
 
         Lyric newLyric = new Lyric();
@@ -162,18 +162,14 @@ public class LyricService {
             return newLyric;
         }
 
-        // 歌词源为全民K歌时，无论是否开启智能匹配，都优先读取本地缓存歌词
-        if ("kg".equals(source)) {
-            try {
-                Lyric localLyric = kgLocalService.getLocalLyric(windowTitle);
-                if (localLyric != null && localLyric.getHasLyric()) {
-                    log.info("使用全民K歌本地缓存歌词");
-                    return localLyric;
-                }
-                log.info("全民K歌本地无歌词，退化为在线获取");
-            } catch (Exception e) {
-                log.warn("读取全民K歌本地歌词失败: {}", e.getMessage());
+        // 如果当前平台为全民 K 歌，则优先读取全民 K 歌本地缓存歌词
+        if ("wesing".equals(audioService.getCurrentPlatform())) {
+            Lyric localLyric = weSingService.getLocalLyric(windowTitle);
+            if (localLyric != null && localLyric.getHasLyric()) {
+                log.info("使用全民 K 歌本地缓存歌词");
+                return localLyric;
             }
+            log.info("全民 K 歌本地无歌词，退化为在线获取");
         }
 
         if (autoSelectBestLyric) {
@@ -182,9 +178,7 @@ public class LyricService {
         } else {
             // 获取指定平台的歌词
             try {
-                if ("kg".equals(source)) {  // 歌词源为全民K歌（本地已无缓存，使用 QQ 音乐在线歌词）
-                    newLyric = qqMusicService.getLyric(windowTitle);
-                } else if ("qq".equals(source)) {  // 歌词源为 QQ 音乐
+                if ("qq".equals(source)) {  // 歌词源为 QQ 音乐
                     newLyric = qqMusicService.getLyric(windowTitle);
                 } else {  // 歌词源为网易云音乐（默认）
                     if (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫")) {
@@ -461,7 +455,7 @@ public class LyricService {
     }
 
     /**
-     * 强制刷新歌词（由 KGLocalService WatchService 调用）
+     * 强制刷新歌词（由 WeSingService 的 WatchService 调用）
      * 清除缓存标记，重新获取歌词并发布事件
      */
     public void forceRefreshLyric() {

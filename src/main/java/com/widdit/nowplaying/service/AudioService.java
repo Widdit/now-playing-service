@@ -5,6 +5,7 @@ import com.widdit.nowplaying.entity.RespData;
 import com.widdit.nowplaying.entity.SettingsGeneral;
 import com.widdit.nowplaying.entity.cmd.Args;
 import com.widdit.nowplaying.entity.cmd.Option;
+import com.widdit.nowplaying.event.CurrentPlatformChangedEvent;
 import com.widdit.nowplaying.event.MusicStatusUpdatedEvent;
 import com.widdit.nowplaying.event.SettingsGeneralChangedEvent;
 import com.widdit.nowplaying.util.ConsoleUtil;
@@ -16,9 +17,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @Slf4j
@@ -33,6 +36,7 @@ public class AudioService {
     private volatile String status = "None";
     // 当前窗口标题
     private volatile String windowTitle = "";
+
     // 当前播放进度（秒），由 C# 端通过 Progress 行传递，-1 表示无进度
     private volatile int progressSeconds = -1;
     // 当前歌曲总时长（秒），由 C# 端通过 Progress 行传递，-1 表示无进度
@@ -40,6 +44,8 @@ public class AudioService {
 
     // 首选音乐平台是否正在运行
     private boolean primaryPlatformRunning = true;
+    // 上一次生效的当前音乐平台，用于判断 currentPlatform 是否发生变化
+    private volatile String lastCurrentPlatform;
 
     private Process getMusicStatusProcess;
     private Thread musicStatusReaderThread;
@@ -50,6 +56,7 @@ public class AudioService {
      */
     @PostConstruct
     public void init() {
+        lastCurrentPlatform = getCurrentPlatform();
         startGetMusicStatus();
     }
 
@@ -69,8 +76,17 @@ public class AudioService {
         return totalSeconds;
     }
 
-    public boolean getPrimaryPlatformRunning() {
-        return primaryPlatformRunning;
+    /**
+     * 获取当前音乐平台
+     * @return
+     */
+    public String getCurrentPlatform() {
+        SettingsGeneral settings = settingsService.getSettingsGeneral();
+        String platform = settings.getPlatform();
+        if (settings.getFallbackPlatformEnabled() && !primaryPlatformRunning) {
+            platform = settings.getFallbackPlatform();
+        }
+        return platform;
     }
 
     /**
@@ -80,14 +96,9 @@ public class AudioService {
         // 封装命令行参数
         SettingsGeneral settingsGeneral = settingsService.getSettingsGeneral();
 
-        String platform = settingsGeneral.getPlatform();
-        if (settingsGeneral.getFallbackPlatformEnabled() && !primaryPlatformRunning) {
-            platform = settingsGeneral.getFallbackPlatform();
-        }
-
         List<Option> options = new ArrayList<>();
         options.add(new Option("--device-id", settingsGeneral.getDeviceId()));
-        options.add(new Option("--platform", platform));
+        options.add(new Option("--platform", getCurrentPlatform()));
         options.add(new Option("--smtc", settingsGeneral.getSmtc().toString()));
         options.add(new Option("--poll-interval", settingsGeneral.getPollInterval().toString()));
         Args args = new Args(options);
@@ -197,7 +208,7 @@ public class AudioService {
     /**
      * Spring 容器销毁时清理 C# 子进程
      */
-    @javax.annotation.PreDestroy
+    @PreDestroy
     public void cleanup() {
         stopGetMusicStatus();
     }
@@ -246,6 +257,7 @@ public class AudioService {
                 totalSeconds = -1;
 
                 startGetMusicStatus();
+                notifyCurrentPlatformChangedIfNeeded();
             }
 
         } catch (Exception e) {
@@ -268,6 +280,7 @@ public class AudioService {
         totalSeconds = -1;
 
         startGetMusicStatus();
+        notifyCurrentPlatformChangedIfNeeded();
     }
 
     /**
@@ -320,6 +333,21 @@ public class AudioService {
         }
 
         return new RespData<>(stdOut);
+    }
+
+    /**
+     * 检查当前音乐平台是否发生变化，如果变化则发布事件
+     */
+    private void notifyCurrentPlatformChangedIfNeeded() {
+        String newPlatform = getCurrentPlatform();
+
+        if (!Objects.equals(lastCurrentPlatform, newPlatform)) {
+            String oldPlatform = lastCurrentPlatform;
+            lastCurrentPlatform = newPlatform;
+
+            log.info("当前音乐平台发生变化: {} -> {}", oldPlatform, newPlatform);
+            eventPublisher.publishEvent(new CurrentPlatformChangedEvent(this, oldPlatform, newPlatform));
+        }
     }
 
 }

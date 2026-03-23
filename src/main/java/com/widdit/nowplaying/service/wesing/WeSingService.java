@@ -1,14 +1,16 @@
-package com.widdit.nowplaying.service.kg;
+package com.widdit.nowplaying.service.wesing;
 
 import com.widdit.nowplaying.entity.Lyric;
+import com.widdit.nowplaying.event.CurrentPlatformChangedEvent;
+import com.widdit.nowplaying.event.SettingsGeneralChangedEvent;
+import com.widdit.nowplaying.service.AudioService;
 import com.widdit.nowplaying.service.LyricService;
-import com.widdit.nowplaying.service.qq.Decrypter;
+import com.widdit.nowplaying.service.SettingsService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
-import org.w3c.dom.Document;
-import org.w3c.dom.Node;
 
 import com.widdit.nowplaying.util.SongUtil;
 
@@ -16,46 +18,30 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.File;
 import java.nio.file.*;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
 @Slf4j
-public class KGLocalService {
-
-    // 全民K歌本地缓存目录
-    private static final String CACHE_DIR = System.getenv("APPDATA")
-            + "\\Tencent\\WeSing\\WeSingCache\\WeSingDL\\Res\\";
-
-    private static final int QRC_HEADER_LENGTH = 11;
-    // QRC 逐字歌词的时间格式: [startMs,durationMs]
-    private static final Pattern QRC_TIME_PATTERN = Pattern.compile("^\\[(\\d+),(\\d+)]");
-    // 标准 LRC 时间格式: [MM:SS.ms]
-    private static final Pattern LRC_TIME_PATTERN = Pattern.compile("\\[(\\d{2}):(\\d{2})[.](\\d{2,3})]");
-
-    // 全民K歌运行日志目录（UTF-16LE 编码，每次选歌都会记录 StartKSong JSON）
-    private static final String LOG_DIR = System.getenv("APPDATA")
-            + "\\Tencent\\WeSing\\WeSingCache\\Log\\WeSing\\";
-    // 日志中提取 songmid 和歌名的模式
-    private static final Pattern LOG_MID_PATTERN = Pattern.compile("\"mid\":\"([^\"]+)\"");
-    private static final Pattern LOG_SONGNAME_PATTERN = Pattern.compile("\"songname\":\"([^\"]+)\"");
-
+public class WeSingService {
+    
+    @Autowired
+    private AudioService audioService;
+    @Autowired
+    private SettingsService settingsService;
     @Autowired
     @Lazy
     private LyricService lyricService;
 
+    // 日志中提取 songmid 和歌名的模式
+    private static final Pattern LOG_MID_PATTERN = Pattern.compile("\"mid\":\"([^\"]+)\"");
+    private static final Pattern LOG_SONGNAME_PATTERN = Pattern.compile("\"songname\":\"([^\"]+)\"");
+
     // 策略 C: WatchService 监听线程
     private Thread watchThread;
     private volatile boolean watching = false;
-    // 上一次检测到的最新 .qrc 文件路径（用于去重，避免重复触发）
-    private volatile String lastQrcPath = "";
 
     // 缓存条目：歌名 + 歌手 + 文件
     private static class QrcCacheEntry {
@@ -75,20 +61,16 @@ public class KGLocalService {
     // 已扫描过的文件路径集合（避免重复解密）
     private final Set<String> scannedFiles = ConcurrentHashMap.newKeySet();
 
+    // 上一次的 weSingCachePath，用于判断设置是否发生变化
+    private volatile String lastWeSingCachePath;
+
     @PostConstruct
     public void init() {
-        // 策略 B: 异步扫描所有 .qrc 文件，解密提取歌名，建立索引（避免阻塞 Spring 容器启动）
-        Thread cacheThread = new Thread(() -> {
-            File cacheDir = new File(CACHE_DIR);
-            if (cacheDir.exists() && cacheDir.isDirectory()) {
-                log.info("启动时扫描全民K歌缓存目录建立歌名索引...");
-                buildTitleCache(cacheDir);
-                log.info("歌名索引建立完成，共索引 {} 个歌名条目", titleToQrcCache.values().stream().mapToInt(List::size).sum());
-            }
-        }, "kg-cache-builder");
-        cacheThread.setDaemon(true);
-        cacheThread.start();
-        startWatching();
+        lastWeSingCachePath = normalizeCachePath(settingsService.getSettingsGeneral().getWeSingCachePath());
+
+        if (isWeSing(audioService.getCurrentPlatform())) {
+            initQrcIndexAsync();
+        }
     }
 
     @PreDestroy
@@ -97,14 +79,32 @@ public class KGLocalService {
     }
 
     /**
+     * 获取全民 K 歌缓存目录
+     */
+    public String getCacheDir() {
+        String basePath = settingsService.getSettingsGeneral().getWeSingCachePath();
+        return basePath + "\\WeSingDL\\Res\\";
+    }
+
+    /**
+     * 获取全民 K 歌日志目录（UTF-16LE 编码，每次选歌都会记录 StartKSong JSON）
+     */
+    public String getLogDir() {
+        String basePath = settingsService.getSettingsGeneral().getWeSingCachePath();
+        return basePath + "\\Log\\WeSing\\";
+    }
+
+    /**
      * 策略 B: 从本地缓存获取歌词（纯歌名索引匹配，不回退到最近修改文件）
      * @param windowTitle 当前窗口标题，用于匹配正确的歌词文件
      */
     public Lyric getLocalLyric(String windowTitle) {
+        String cacheDir = getCacheDir();
+
         try {
-            File cacheDir = new File(CACHE_DIR);
-            if (!cacheDir.exists() || !cacheDir.isDirectory()) {
-                log.info("全民K歌缓存目录不存在: {}", CACHE_DIR);
+            File dir = new File(cacheDir);
+            if (!dir.exists() || !dir.isDirectory()) {
+                log.info("全民 K 歌缓存目录不存在: {}", cacheDir);
                 return null;
             }
 
@@ -113,10 +113,10 @@ public class KGLocalService {
 
             File matchedQrc = null;
 
-            // 优先：从 WeSing 日志提取 songmid，直接定位歌词文件（精确匹配，解决同名歌曲问题）
+            // 优先：从全民 K 歌日志提取 songmid，直接定位歌词文件（精确匹配，解决同名歌曲问题）
             String songMid = findSongMidFromLog(songTitle);
             if (songMid != null) {
-                File directQrc = new File(CACHE_DIR + songMid + "\\" + songMid + ".qrc");
+                File directQrc = new File(cacheDir + songMid + "\\" + songMid + ".qrc");
                 if (directQrc.exists()) {
                     matchedQrc = directQrc;
                     log.info("通过日志 songmid 精确定位歌词: {}", directQrc.getAbsolutePath());
@@ -125,7 +125,7 @@ public class KGLocalService {
 
             // 回退：按歌名索引匹配
             if (matchedQrc == null) {
-                matchedQrc = findQrcByTitle(cacheDir, songTitle);
+                matchedQrc = findQrcByTitle(dir, songTitle);
             }
 
             if (matchedQrc == null) {
@@ -133,32 +133,93 @@ public class KGLocalService {
                 return null;
             }
 
-            log.info("找到全民K歌本地歌词文件: {}", matchedQrc.getAbsolutePath());
-            lastQrcPath = matchedQrc.getAbsolutePath();
+            log.info("找到全民 K 歌本地歌词文件: {}", matchedQrc.getAbsolutePath());
 
-            String qrcXml = decryptLocalQrc(matchedQrc);
+            String qrcXml = WeSingHelper.decryptLocalQrc(matchedQrc);
             if (qrcXml == null || qrcXml.isEmpty()) {
                 log.error("QRC 解密失败");
                 return null;
             }
 
-            return buildLyric(qrcXml);
+            // 构造歌词对象
+            return WeSingHelper.buildLyric(qrcXml, songTitle);
+
         } catch (Exception e) {
-            log.error("获取全民K歌本地歌词失败: {}", e.getMessage());
+            log.error("读取全民 K 歌本地歌词失败: {}", e.getMessage());
             return null;
         }
     }
 
+    @EventListener
+    public void handleCurrentPlatformChanged(CurrentPlatformChangedEvent event) {
+        boolean oldIsWeSing = isWeSing(event.getOldPlatform());
+        boolean newIsWeSing = isWeSing(event.getNewPlatform());
+
+        // 其他值 -> wesing
+        if (!oldIsWeSing && newIsWeSing) {
+            log.info("当前音乐平台切换为 wesing，开始初始化 QRC 索引");
+            initQrcIndexAsync();
+            return;
+        }
+
+        // wesing -> 其他值
+        if (oldIsWeSing && !newIsWeSing) {
+            log.info("当前音乐平台从 wesing 切换为 {}，停止目录监听", event.getNewPlatform());
+            stopWatching();
+        }
+    }
+
+    @EventListener
+    public void handleSettingsGeneralChanged(SettingsGeneralChangedEvent event) {
+        String newWeSingCachePath = normalizeCachePath(settingsService.getSettingsGeneral().getWeSingCachePath());
+
+        if (Objects.equals(lastWeSingCachePath, newWeSingCachePath)) {
+            return;
+        }
+
+        lastWeSingCachePath = newWeSingCachePath;
+
+        log.info("检测到 weSingCachePath 发生变化: {}", newWeSingCachePath);
+
+        // 先停止旧目录监听
+        stopWatching();
+
+        // 清空旧目录建立的索引缓存，避免残留旧路径数据
+        clearQrcCache();
+
+        // 重新初始化新目录索引并启动监听
+        initQrcIndexAsync();
+    }
+
     /**
-     * 从全民K歌运行日志中提取最近一次选歌的 songmid
-     * WeSing 每次选歌（即使歌曲已缓存）都会在日志中记录 StartKSong JSON，包含 mid 字段
+     * 异步扫描所有 .qrc 文件，解密提取歌名，建立索引
+     */
+    private void initQrcIndexAsync() {
+        Thread cacheThread = new Thread(() -> {
+            File cacheDir = new File(getCacheDir());
+            if (cacheDir.exists() && cacheDir.isDirectory()) {
+                log.info("扫描全民 K 歌缓存目录建立歌名索引...");
+                buildTitleCache(cacheDir);
+                log.info("歌名索引建立完成，共索引 {} 个歌名条目", titleToQrcCache.values().stream().mapToInt(List::size).sum());
+            }
+        }, "wesing-cache-builder");
+
+        cacheThread.setDaemon(true);
+        cacheThread.start();
+
+        startWatching();
+    }
+
+    /**
+     * 从全民 K 歌运行日志中提取最近一次选歌的 songmid
+     * 全民 K 歌每次选歌（即使歌曲已缓存）都会在日志中记录 StartKSong JSON，包含 mid 字段
      * 日志编码为 UTF-16LE
      * @param expectedSongName 预期的歌名（从窗口标题解析），用于验证日志条目是否匹配当前播放
      * @return songmid 或 null
      */
     private String findSongMidFromLog(String expectedSongName) {
         try {
-            File logDir = new File(LOG_DIR);
+            File logDir = new File(getLogDir());
             if (!logDir.exists() || !logDir.isDirectory()) {
                 return null;
             }
@@ -227,17 +288,17 @@ public class KGLocalService {
                 }
             }
 
-            log.info("从 WeSing 日志提取到 songmid: {}", mid);
+            log.info("从全民 K 歌日志提取到 songmid: {}", mid);
             return mid;
         } catch (Exception e) {
-            log.debug("解析 WeSing 日志失败: {}", e.getMessage());
+            log.debug("解析全民 K 歌日志失败: {}", e.getMessage());
             return null;
         }
     }
 
     /**
      * 根据窗口标题在缓存中查找最佳匹配的 .qrc 文件
-     * 全民K歌窗口标题格式: "画你(女声版)(Live)"，QRC 中 [ti:] 可能是 "画你 （女声版）"
+     * 全民 K 歌窗口标题格式: "画你(女声版)(Live)"，QRC 中 [ti:] 可能是 "画你 （女声版）"
      * 同名歌曲通过窗口标题中的附加信息（如 Live、Cover、女声版）区分
      */
     private File findQrcByTitle(File cacheDir, String songTitle) {
@@ -268,7 +329,7 @@ public class KGLocalService {
     /**
      * 在所有缓存条目中找最佳匹配
      * 匹配策略：精确匹配 > 规范化匹配 > 基础名包含匹配（带消歧义评分）
-     * 同分时用 lastModified 时间戳选最近使用的（全民K歌播放时会写入/更新缓存文件）
+     * 同分时用 lastModified 时间戳选最近使用的（全民 K 歌播放时会写入/更新缓存文件）
      */
     private File findBestMatchInEntries(String normalizedQuery) {
         // 提取基础歌名（去掉括号修饰）
@@ -329,7 +390,7 @@ public class KGLocalService {
                 }
 
                 // 同分时用缓存目录中最新文件的 lastModified 消歧
-                // 全民K歌每次播放都会重新写入 .qrc/.pcm 等文件，最近播放的目录时间最新
+                // 全民 K 歌每次播放都会重新写入 .qrc/.pcm 等文件，最近播放的目录时间最新
                 long dirModified = getLatestModifiedInDir(cacheEntry.file.getParentFile());
                 if (score > bestScore || (score == bestScore && dirModified > bestModified)) {
                     bestScore = score;
@@ -393,7 +454,7 @@ public class KGLocalService {
                 if (scannedFiles.contains(path)) continue;
 
                 try {
-                    String qrcXml = decryptLocalQrc(qrcFile);
+                    String qrcXml = WeSingHelper.decryptLocalQrc(qrcFile);
                     if (qrcXml == null) continue; // 解密失败（可能文件未写完），不标记，下次重试
 
                     String[] titleAndArtist = extractTitleAndArtistFromQrc(qrcXml);
@@ -449,7 +510,7 @@ public class KGLocalService {
 
     /**
      * 获取目录中所有文件的最新 lastModified 时间
-     * 全民K歌每次播放歌曲时会重新写入 .qrc/.pcm 等缓存文件
+     * 全民 K 歌每次播放歌曲时会重新写入 .qrc/.pcm 等缓存文件
      */
     private long getLatestModifiedInDir(File dir) {
         if (dir == null || !dir.isDirectory()) return 0;
@@ -463,41 +524,50 @@ public class KGLocalService {
         return latest;
     }
 
-    // ==================== 策略 C: WatchService 文件监听 ====================
-
     /**
-     * 启动 WatchService 监听 Res/ 目录及其子目录
-     * 检测到新 .qrc 文件写入时，发布 LyricChangedEvent 通知歌词刷新
+     * 启动 WatchService 监听 Res 目录及其子目录
      */
-    private void startWatching() {
-        File cacheDir = new File(CACHE_DIR);
-        if (!cacheDir.exists() || !cacheDir.isDirectory()) {
-            log.info("全民K歌缓存目录不存在，跳过 WatchService: {}", CACHE_DIR);
+    private synchronized void startWatching() {
+        if (watching) {
+            return;
+        }
+
+        String cacheDir = getCacheDir();
+
+        File dir = new File(cacheDir);
+        if (!dir.exists() || !dir.isDirectory()) {
+            log.info("全民 K 歌缓存目录不存在，跳过 WatchService: {}", cacheDir);
             return;
         }
 
         watching = true;
-        watchThread = new Thread(this::watchLoop, "kg-qrc-watcher");
+        watchThread = new Thread(this::watchLoop, "wesing-qrc-watcher");
         watchThread.setDaemon(true);
         watchThread.start();
-        log.info("启动全民K歌缓存目录监听: {}", CACHE_DIR);
+        log.info("启动全民 K 歌缓存目录监听: {}", cacheDir);
     }
 
-    private void stopWatching() {
+    /**
+     * 停止 WatchService 监听 Res 目录及其子目录
+     */
+    private synchronized void stopWatching() {
         watching = false;
         if (watchThread != null) {
             watchThread.interrupt();
+            watchThread = null;
         }
     }
 
     /**
      * WatchService 监听循环
-     * 监听 Res/ 目录下新子目录的创建和已有子目录中 .qrc 文件的写入
+     * 监听 Res 目录下新子目录的创建和已有子目录中 .qrc 文件的写入
      */
     private void watchLoop() {
+        String cacheDir = getCacheDir();
+
         try (WatchService watcher = FileSystems.getDefault().newWatchService()) {
-            Path resPath = Paths.get(CACHE_DIR);
-            // 注册 Res/ 目录本身（监听新子目录创建）
+            Path resPath = Paths.get(cacheDir);
+            // 注册 Res 目录本身（监听新子目录创建）
             resPath.register(watcher,
                     StandardWatchEventKinds.ENTRY_CREATE,
                     StandardWatchEventKinds.ENTRY_MODIFY);
@@ -553,7 +623,7 @@ public class KGLocalService {
                     try { Thread.sleep(2000); } catch (InterruptedException e) { break; }
 
                     // 扫描并索引新增的 .qrc 文件
-                    File cacheDirForScan = new File(CACHE_DIR);
+                    File cacheDirForScan = new File(cacheDir);
                     int sizeBefore = scannedFiles.size();
                     buildTitleCache(cacheDirForScan);
                     int sizeAfter = scannedFiles.size();
@@ -570,193 +640,40 @@ public class KGLocalService {
         }
     }
 
-    // ==================== 工具方法 ====================
-
     /**
-     * 解密本地 .qrc 文件
+     * 判断指定平台是否为全民 K 歌
+     * @param platform 平台
+     * @return
      */
-    private String decryptLocalQrc(File qrcFile) {
-        try {
-            byte[] fileBytes = java.nio.file.Files.readAllBytes(qrcFile.toPath());
-
-            int offset = 0;
-            if (fileBytes.length > QRC_HEADER_LENGTH) {
-                String header = new String(fileBytes, 0, QRC_HEADER_LENGTH);
-                if (header.startsWith("[offset:")) {
-                    for (int i = 0; i < Math.min(fileBytes.length, 50); i++) {
-                        if (fileBytes[i] == '\n') {
-                            offset = i + 1;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            byte[] dataBytes = Arrays.copyOfRange(fileBytes, offset, fileBytes.length);
-            StringBuilder hexString = new StringBuilder(dataBytes.length * 2);
-            for (byte b : dataBytes) {
-                hexString.append(String.format("%02x", b & 0xFF));
-            }
-
-            return Decrypter.decryptLyrics(hexString.toString());
-        } catch (Exception e) {
-            log.error("解密 QRC 文件失败: {}", e.getMessage());
-            return null;
-        }
+    private boolean isWeSing(String platform) {
+        return "wesing".equalsIgnoreCase(platform);
     }
 
     /**
-     * 将 QRC XML 转为 Lyric 对象
-     * 注意: LyricContent 作为 XML 属性值时，换行符会被 DOM 解析器规范化为空格，
-     * 因此直接从原始 XML 字符串中用正则提取 LyricContent，保留原始换行。
+     * 清空 QRC 索引缓存
      */
-    private Lyric buildLyric(String qrcXml) {
-        Lyric lyric = new Lyric();
-        // source 设为 "qq"，因为 QRC 格式与 QQ 音乐完全相同，
-        // 前端逐字歌词解析器按 source 分发：netease→yrc, qq→qrc，"kg" 不被识别会导致歌词为空
-        lyric.setSource("qq");
-
-        try {
-            // 从原始 XML 字符串中直接提取 LyricContent（避免 DOM 属性换行规范化问题）
-            String content = extractLyricContent(qrcXml);
-
-            if (content != null && !content.isEmpty()) {
-                lyric.setKaraokeLyric(content);
-                lyric.setHasKaraokeLyric(true);
-
-                String lrc = convertQrcToLrc(content);
-                if (lrc != null && !lrc.isEmpty()) {
-                    lyric.setLrc(lrc);
-                    lyric.setHasLyric(true);
-                }
-            }
-
-            // 翻译歌词仍用 DOM 提取（无换行问题）
-            Document doc = Decrypter.createXmlDocument(qrcXml);
-            Map<String, String> mappingDict = new HashMap<>();
-            mappingDict.put("BDLyric", "translatedLyric");
-            Map<String, Node> resDict = new HashMap<>();
-            Decrypter.recursionFindElement(doc.getDocumentElement(), mappingDict, resDict);
-
-            Node translatedNode = resDict.get("translatedLyric");
-            if (translatedNode != null) {
-                String translatedContent = Decrypter.getNodeText(translatedNode);
-                if (translatedContent != null && !translatedContent.isEmpty()) {
-                    lyric.setTranslatedLyric(translatedContent);
-                    lyric.setHasTranslatedLyric(true);
-                }
-            }
-
-        } catch (Exception e) {
-            log.error("解析 QRC XML 失败: {}", e.getMessage());
-            if (qrcXml.contains("[") && qrcXml.contains("]")) {
-                lyric.setLrc(qrcXml);
-                lyric.setHasLyric(true);
-            }
-        }
-
-        return lyric;
+    private synchronized void clearQrcCache() {
+        titleToQrcCache.clear();
+        scannedFiles.clear();
     }
 
     /**
-     * 从原始 QRC XML 字符串中提取 LyricContent 属性值
-     * 直接用字符串查找，避免 DOM 解析器将属性中的换行符规范化为空格
-     * 使用转义感知的引号查找，处理歌词中可能包含 &quot; 转义引号的情况
+     * 路径规范化
+     * @param path 路径
+     * @return
      */
-    private String extractLyricContent(String qrcXml) {
-        String marker = "LyricContent=\"";
-        int start = qrcXml.indexOf(marker);
-        if (start < 0) {
-            return null;
-        }
-        start += marker.length();
-
-        // 转义感知的结束引号查找：跳过被转义的引号（如 &quot;）
-        int pos = start;
-        while (pos < qrcXml.length()) {
-            int quotePos = qrcXml.indexOf("\"", pos);
-            if (quotePos < 0) {
-                return null;
-            }
-            // 检查这个引号前面是否是 &quot 的一部分（即 &quot;）
-            // &quot; 中 " 前面紧跟 &quot 共5个字符
-            if (quotePos >= 5 && qrcXml.substring(quotePos - 5, quotePos + 1).equals("&quot;")) {
-                pos = quotePos + 1;
-                continue;
-            }
-            return qrcXml.substring(start, quotePos);
+    private String normalizeCachePath(String path) {
+        if (path == null) {
+            return "";
         }
 
-        return null;
+        String normalized = path.trim().replace('/', '\\');
+
+        while (normalized.endsWith("\\")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        return normalized;
     }
 
-    /**
-     * 将 QRC 逐字歌词转换为标准 LRC 歌词
-     * QRC 格式: [startMs,durationMs]字(charStartMs,charDuration)字(charStartMs,charDuration)...
-     * LRC 格式: [MM:SS.xx]歌词文本
-     */
-    private String convertQrcToLrc(String qrcContent) {
-        if (qrcContent == null || qrcContent.isEmpty()) {
-            return null;
-        }
-
-        StringBuilder lrc = new StringBuilder();
-        String[] lines = qrcContent.split("\n");
-
-        for (String line : lines) {
-            line = line.trim();
-            if (line.isEmpty()) continue;
-
-            // 跳过元信息行 [ti:] [ar:] [al:] [by:] [offset:]
-            if (line.startsWith("[ti:") || line.startsWith("[ar:") ||
-                line.startsWith("[al:") || line.startsWith("[by:") ||
-                line.startsWith("[offset:")) {
-                continue;
-            }
-
-            // 先尝试匹配 QRC 毫秒格式 [startMs,durationMs]
-            Matcher qrcMatcher = QRC_TIME_PATTERN.matcher(line);
-            if (qrcMatcher.find()) {
-                int startMs = Integer.parseInt(qrcMatcher.group(1));
-                String timeTag = msToLrcTime(startMs);
-
-                // 提取歌词文本：去掉行首的 [ms,ms]，再去掉逐字时间标签 (ms,ms)
-                String text = line.substring(qrcMatcher.end());
-                text = text.replaceAll("\\(\\d+,\\d+\\)", "");
-                text = text.trim();
-
-                if (!text.isEmpty()) {
-                    lrc.append(timeTag).append(text).append("\n");
-                }
-                continue;
-            }
-
-            // 再尝试匹配标准 LRC 格式 [MM:SS.ms]
-            Matcher lrcMatcher = LRC_TIME_PATTERN.matcher(line);
-            if (lrcMatcher.find()) {
-                String timeTag = lrcMatcher.group(0);
-                String text = line.substring(lrcMatcher.end());
-                text = text.replaceAll("\\(\\d+,\\d+\\)", "");
-                text = text.replaceAll("\\[\\d+,\\d+]", "");
-                text = text.trim();
-
-                if (!text.isEmpty()) {
-                    lrc.append(timeTag).append(text).append("\n");
-                }
-            }
-        }
-
-        return lrc.toString();
-    }
-
-    /**
-     * 将毫秒转换为 LRC 时间标签 [MM:SS.xx]
-     */
-    private String msToLrcTime(int ms) {
-        int totalSec = ms / 1000;
-        int minutes = totalSec / 60;
-        int seconds = totalSec % 60;
-        int hundredths = (ms % 1000) / 10;
-        return String.format("[%02d:%02d.%02d]", minutes, seconds, hundredths);
-    }
 }

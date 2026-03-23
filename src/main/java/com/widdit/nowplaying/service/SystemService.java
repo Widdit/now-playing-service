@@ -125,6 +125,8 @@ public class SystemService {
                 .fallbackPlatformEnabled(settingsGeneral.getFallbackPlatformEnabled())
                 .fallbackPlatform(settingsGeneral.getFallbackPlatform())
                 .pollInterval(settingsGeneral.getPollInterval())
+                .weSingCachePath(settingsGeneral.getWeSingCachePath())
+                .weSingCachePathExist(weSingCachePathExist().getData())
                 .lyricSource(settingsLyricCommon.getLyricSource())
                 .autoSelectBestLyric(settingsLyricCommon.getAutoSelectBestLyric())
                 .build();
@@ -375,6 +377,16 @@ public class SystemService {
         } catch (Exception e) {
             log.error("还原 example 示例文件夹时发生未知错误", e);
         }
+    }
+
+    /**
+     * 全民 K 歌缓存目录是否存在
+     * @return
+     */
+    public RespData<Boolean> weSingCachePathExist() {
+        Path weSingCachePath = Paths.get(settingsService.getSettingsGeneral().getWeSingCachePath());
+        boolean weSingCachePathExist = Files.exists(weSingCachePath) && Files.isDirectory(weSingCachePath);
+        return new RespData<>(weSingCachePathExist);
     }
 
     /**

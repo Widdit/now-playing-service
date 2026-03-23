@@ -70,7 +70,7 @@ public class WebSocketService {
     }
 
     /**
-     * 监听进度同步事件（kg 平台每秒同步 C# 端的实际进度到前端）
+     * 监听进度同步事件（全民 K 歌每秒同步 C# 端的实际进度到前端）
      */
     @EventListener
     public void handlePlayerProgressSync(PlayerProgressSyncEvent event) {

@@ -57,6 +57,12 @@ public class AppInfo {
     // 轮询间隔（毫秒）
     private Integer pollInterval;
 
+    // 全民 K 歌缓存目录
+    private String weSingCachePath = "";
+
+    // 全民 K 歌缓存目录是否存在
+    private Boolean weSingCachePathExist = true;
+
     // ============= 歌词设置 =============
 
     private String lyricSource;

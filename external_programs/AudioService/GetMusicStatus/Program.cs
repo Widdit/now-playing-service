@@ -83,7 +83,7 @@ class Program
             { "miebo", (smtc) => new MieboService() },
             { "yesplay", (smtc) => new YesPlayMusicService() },
             { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
-            { "kg", (smtc) => new WeSingService() },
+            { "wesing", (smtc) => new WeSingService() },
         };
 
         MusicService musicService;

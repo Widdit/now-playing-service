@@ -239,12 +239,8 @@ public class NeteaseMusicService {
         // 1. 获取歌曲在网易云音乐的 ID 和基本信息
         String id = null;
 
-        boolean isNetease = "netease".equals(settingsService.getSettingsGeneral().getPlatform());
-        boolean fallbackEnabled = settingsService.getSettingsGeneral().getFallbackPlatformEnabled();
-        boolean primaryRunning = audioService.getPrimaryPlatformRunning();
-
         // 当前平台刚好就是网易云音乐，免去一次搜索歌曲的网络请求
-        if (isNetease && (!fallbackEnabled || primaryRunning)) {
+        if ("netease".equals(audioService.getCurrentPlatform())) {
             int maxRetries = 5;
 
             for (int attempt = 0; attempt <= maxRetries; attempt++) {
@@ -301,8 +297,14 @@ public class NeteaseMusicService {
         // 计算相似度，判断歌曲信息与真实信息是否匹配
         int similarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, title, author);
 
+        int matchThreshold = SongMatchingUtil.EXACT_MATCH_THRESHOLD;
+        // 对于歌手名缺失的情况，可适当降低阈值标准
+        if (realAuthor == null || realAuthor.isBlank()) {
+            matchThreshold = 75;
+        }
+
         // 如果歌曲错误，则说明网易云音乐没有该歌曲，也就没有必要再调用 API 获取歌词了
-        if (similarity < SongMatchingUtil.EXACT_MATCH_THRESHOLD) {
+        if (similarity < matchThreshold) {
             // 设置真实歌曲标题，而非错误歌曲标题
             lyric.setTitle(realTitle);
             lyric.setAuthor(realAuthor);

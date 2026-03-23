@@ -1,16 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Windows.Automation;
+using System.Runtime.InteropServices;
+using Interop.UIAutomationClient;
 using CSCore.CoreAudioAPI;
 
 public class WeSingService : MusicService
 {
+    // 用于在开发阶段控制是否打印异常信息
+    private const bool PRINT_EXCEPTION_LOG = false;
+
     // 上次读取到的进度秒数，用于判断播放/暂停
     private int _lastProgressSeconds = -1;
     // 上次进度变化的时间戳
     private DateTime _lastProgressChangeTime = DateTime.MinValue;
     // 缓存的播放状态
     private string _cachedStatus = "None";
+
+    private IUIAutomation _automation;
+
+    private const int UIA_ProcessIdPropertyId = 30002;
+    private const int UIA_ControlTypePropertyId = 30003;
+    private const int UIA_TextControlTypeId = 50020;
 
     public override string GetMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -34,39 +44,56 @@ public class WeSingService : MusicService
         // 2. 通过 UI Automation 读取进度
         int currentSec = -1;
         int totalSec = -1;
+        IUIAutomationElement root = null;
 
         try
         {
-            AutomationElement root = FindWeSingWindow();
+            root = FindWeSingWindow();
             if (root != null)
             {
                 ParseProgress(root, out currentSec, out totalSec);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // UI Automation 失败时忽略，退化为无进度模式
+            if (PRINT_EXCEPTION_LOG)
+            {
+                Console.WriteLine($"【全民K歌】读取进度时发生UI Automation异常：");
+                Console.WriteLine($"异常消息：{ex.Message}");
+                Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                Console.WriteLine("----------------------------------------");
+            }
+        }
+        finally
+        {
+            ReleaseComObject(root);
         }
 
         // 3. 通过进度是否变化来判断播放/暂停
         string status = DetermineStatus(currentSec);
 
         // 4. 构建输出
+        string fixedTitle = FixTitleWeSing(windowTitle);
         if (currentSec >= 0 && totalSec > 0)
         {
-            return $"{status}\r\n{windowTitle}\r\nProgress:{currentSec}|{totalSec}";
+            return $"{status}\r\n{fixedTitle}\r\nProgress:{currentSec}|{totalSec}";
         }
         else
         {
-            return $"{status}\r\n{windowTitle}";
+            return $"{status}\r\n{fixedTitle}";
         }
     }
 
     /// <summary>
-    /// 查找全民K歌播放窗口的 AutomationElement（标题为 "全民K歌 - {歌曲名}" 的窗口）
+    /// 查找全民K歌播放窗口的 IUIAutomationElement（标题为 "全民K歌 - {歌曲名}" 的窗口）
     /// </summary>
-    private AutomationElement FindWeSingWindow()
+    private IUIAutomationElement FindWeSingWindow()
     {
+        IUIAutomationElement result = null;
+        IUIAutomationElement desktop = null;
+        IUIAutomationCondition pidCondition = null;
+        IUIAutomationElementArray windows = null;
+
         try
         {
             var processes = System.Diagnostics.Process.GetProcessesByName("WeSing");
@@ -80,63 +107,196 @@ public class WeSingService : MusicService
                 proc.Dispose();
             }
 
-            AutomationElement desktop = AutomationElement.RootElement;
-            var pidCondition = new PropertyCondition(AutomationElement.ProcessIdProperty, pid);
-            AutomationElementCollection windows = desktop.FindAll(TreeScope.Children, pidCondition);
+            IUIAutomation automation = GetAutomation();
+            desktop = automation.GetRootElement();
+            pidCondition = automation.CreatePropertyCondition(UIA_ProcessIdPropertyId, pid);
+            windows = desktop.FindAll(TreeScope.TreeScope_Children, pidCondition);
 
             // 找到标题以 "全民K歌 - " 开头的播放窗口（包含进度控件）
-            foreach (AutomationElement win in windows)
+            int count = windows.Length;
+            for (int i = 0; i < count; i++)
             {
+                IUIAutomationElement win = null;
+
                 try
                 {
-                    string name = win.Current.Name;
+                    win = windows.GetElement(i);
+                    string name = win.CurrentName;
                     if (name != null && name.StartsWith("全民K歌 - ") && name.Length > "全民K歌 - ".Length)
                     {
-                        return win;
+                        result = win;
+                        win = null;
+                        break;
                     }
                 }
-                catch (Exception) { }
+                catch (Exception ex)
+                {
+                    if (PRINT_EXCEPTION_LOG)
+                    {
+                        Console.WriteLine($"【全民K歌】获取窗口名称时发生异常：");
+                        Console.WriteLine($"异常消息：{ex.Message}");
+                        Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                        Console.WriteLine("----------------------------------------");
+                    }
+                }
+                finally
+                {
+                    ReleaseComObject(win);
+                }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 忽略
+            if (PRINT_EXCEPTION_LOG)
+            {
+                Console.WriteLine($"【全民K歌】查找播放窗口时发生异常：");
+                Console.WriteLine($"异常消息：{ex.Message}");
+                Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                Console.WriteLine("----------------------------------------");
+            }
+        }
+        finally
+        {
+            ReleaseComObject(windows);
+            ReleaseComObject(pidCondition);
+            ReleaseComObject(desktop);
         }
 
-        return null;
+        return result;
     }
 
     /// <summary>
     /// 从 UI Automation 树中解析进度文本 (格式: "00:08 | 04:16")
     /// </summary>
-    private void ParseProgress(AutomationElement root, out int currentSec, out int totalSec)
+    private void ParseProgress(IUIAutomationElement root, out int currentSec, out int totalSec)
     {
         currentSec = -1;
         totalSec = -1;
 
+        IUIAutomationCondition textCondition = null;
+        IUIAutomationElementArray textElements = null;
+
         try
         {
+            IUIAutomation automation = GetAutomation();
+
             // 搜索所有文本元素，查找匹配进度格式的
-            var textCondition = new PropertyCondition(
-                AutomationElement.ControlTypeProperty, ControlType.Text);
+            textCondition = automation.CreatePropertyCondition(
+                UIA_ControlTypePropertyId, UIA_TextControlTypeId);
 
-            AutomationElementCollection textElements = root.FindAll(TreeScope.Descendants, textCondition);
+            textElements = root.FindAll(TreeScope.TreeScope_Descendants, textCondition);
 
-            foreach (AutomationElement elem in textElements)
+            int count = textElements.Length;
+            for (int i = 0; i < count; i++)
             {
-                string name = elem.Current.Name;
-                if (string.IsNullOrEmpty(name)) continue;
+                IUIAutomationElement elem = null;
 
-                // 尝试匹配 "00:08 | 04:16" 或 "00:08|04:16" 格式
-                if (TryParseProgressText(name, out currentSec, out totalSec))
+                try
                 {
-                    return;
+                    elem = textElements.GetElement(i);
+                    string name = elem.CurrentName;
+                    if (string.IsNullOrEmpty(name)) continue;
+
+                    // 尝试匹配 "00:08 | 04:16" 或 "00:08|04:16" 格式
+                    if (TryParseProgressText(name, out currentSec, out totalSec))
+                    {
+                        return;
+                    }
+                }
+                finally
+                {
+                    ReleaseComObject(elem);
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // 忽略 UI Automation 异常
+            if (PRINT_EXCEPTION_LOG)
+            {
+                Console.WriteLine($"【全民K歌】解析进度文本时发生UI Automation异常：");
+                Console.WriteLine($"异常消息：{ex.Message}");
+                Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                Console.WriteLine("----------------------------------------");
+            }
+        }
+        finally
+        {
+            ReleaseComObject(textElements);
+            ReleaseComObject(textCondition);
+        }
+    }
+
+    private IUIAutomation GetAutomation()
+    {
+        if (_automation != null)
+        {
+            return _automation;
+        }
+
+        try
+        {
+            _automation = (IUIAutomation)new CUIAutomation8();
+            return _automation;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            _automation = (IUIAutomation)new CUIAutomation();
+            return _automation;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Type automationType = Type.GetTypeFromCLSID(new Guid("E22AD333-B25F-460C-83D0-0581107395C9"));
+            if (automationType != null)
+            {
+                _automation = Activator.CreateInstance(automationType) as IUIAutomation;
+                if (_automation != null)
+                {
+                    return _automation;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Type automationType = Type.GetTypeFromCLSID(new Guid("FF48DBA4-60EF-4201-AA87-54103EEF594E"));
+            if (automationType != null)
+            {
+                _automation = Activator.CreateInstance(automationType) as IUIAutomation;
+                if (_automation != null)
+                {
+                    return _automation;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        throw new InvalidOperationException("无法创建 UI Automation COM 对象（CUIAutomation8/CUIAutomation）。");
+    }
+
+    private void ReleaseComObject(object comObject)
+    {
+        if (comObject != null && Marshal.IsComObject(comObject))
+        {
+            try
+            {
+                Marshal.FinalReleaseComObject(comObject);
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -215,5 +375,21 @@ public class WeSingService : MusicService
         }
 
         return _cachedStatus;
+    }
+
+    /*
+        修正全民 K 歌标题
+        "全民K歌 - 爱在西元前" → "爱在西元前"
+    */
+    private string FixTitleWeSing(string windowTitle)
+    {
+        const string prefix = "全民K歌 - ";
+
+        if (!string.IsNullOrEmpty(windowTitle) && windowTitle.StartsWith(prefix))
+        {
+            return windowTitle.Substring(prefix.Length);
+        }
+
+        return windowTitle;
     }
 }

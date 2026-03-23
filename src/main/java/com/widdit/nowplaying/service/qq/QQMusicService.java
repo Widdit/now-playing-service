@@ -206,8 +206,14 @@ public class QQMusicService {
         // 计算相似度，判断歌曲信息与真实信息是否匹配
         int similarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, title, author);
 
+        int matchThreshold = SongMatchingUtil.EXACT_MATCH_THRESHOLD;
+        // 对于歌手名缺失的情况，可适当降低阈值标准
+        if (realAuthor == null || realAuthor.isBlank()) {
+            matchThreshold = 75;
+        }
+
         // 如果歌曲错误，则说明 QQ 音乐没有该歌曲，也就没有必要再调用 API 获取歌词了
-        if (similarity < SongMatchingUtil.EXACT_MATCH_THRESHOLD) {
+        if (similarity < matchThreshold) {
             // 设置真实歌曲标题，而非错误歌曲标题
             lyric.setTitle(realTitle);
             lyric.setAuthor(realAuthor);

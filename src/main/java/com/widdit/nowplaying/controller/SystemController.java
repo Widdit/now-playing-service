@@ -157,4 +157,13 @@ public class SystemController {
         systemService.restorePublicExample();
     }
 
+    /**
+     * 全民 K 歌缓存目录是否存在
+     * @return
+     */
+    @GetMapping("/api/system/weSingCachePathExist")
+    public RespData<Boolean> weSingCachePathExist() {
+        return systemService.weSingCachePathExist();
+    }
+
 }

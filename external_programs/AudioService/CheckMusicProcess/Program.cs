@@ -16,7 +16,7 @@ namespace ProcessChecker
             { "soda", "SodaMusic" },
             { "spotify", "Spotify" },
             { "apple", "AppleMusic" },
-            { "ayna", "AynaLivePlayer" },
+            { "ayna", "start" },
             { "potplayer", "PotPlayerMini64" },
             { "foobar", "foobar2000" },
             { "lx", "lx-music-desktop" },
@@ -28,7 +28,7 @@ namespace ProcessChecker
             { "miebo", "咩播" },
             { "yesplay", "YesPlayMusic" },
             { "cider", "Cider" },
-            { "kg", "WeSing" }
+            { "wesing", "WeSing" }
         };
 
         static void Main(string platform = "netease")

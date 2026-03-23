@@ -41,4 +41,7 @@ public class SettingsGeneral {
     // 轮询间隔（毫秒）
     private Integer pollInterval = 100;
 
+    // 全民 K 歌缓存目录
+    private String weSingCachePath = "";
+
 }
