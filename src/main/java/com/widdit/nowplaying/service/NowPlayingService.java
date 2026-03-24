@@ -1,5 +1,6 @@
 package com.widdit.nowplaying.service;
 
+import com.widdit.nowplaying.component.Timer;
 import com.widdit.nowplaying.entity.*;
 import com.widdit.nowplaying.event.*;
 import com.widdit.nowplaying.service.kugou.KuGouMusicService;
@@ -10,7 +11,6 @@ import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.SongUtil;
 import com.widdit.nowplaying.util.TimeUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.time.StopWatch;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -33,7 +32,7 @@ public class NowPlayingService {
     private Track track = new Track();
 
     // 计时器
-    private StopWatch stopWatch = new StopWatch();
+    private Timer timer = new Timer();
 
     // 前一个窗口标题
     private String prevWindowTitle = "";
@@ -44,10 +43,10 @@ public class NowPlayingService {
     // 状态转为 None 时的时间戳（毫秒）
     private long noneOccursTime = 0;
 
-    // 全民 K 歌上一次的播放进度（秒），用于检测重唱和触发同步（-1 表示自然失去进度（C# 端不再报告进度），-2 表示由切歌/重置清零）
-    private static final int WESING_PROGRESS_NONE = -1;
-    private static final int WESING_PROGRESS_RESET = -2;
-    private int prevWeSingProgressSeconds = WESING_PROGRESS_RESET;
+    // C# 端上一次的播放进度（秒），用于检测重唱和触发同步（-1 表示自然失去进度（C# 端不再报告进度），-2 表示由切歌/重置清零）
+    private static final int CSHARP_PROGRESS_NONE = -1;
+    private static final int CSHARP_PROGRESS_RESET = -2;
+    private int prevCSharpProgressSeconds = CSHARP_PROGRESS_RESET;
 
     private final Map<String, String> otherPlatforms = new HashMap<>();
 
@@ -74,39 +73,6 @@ public class NowPlayingService {
     private LyricService lyricService;
 
     /**
-     * 返回歌曲信息
-     * @return
-     */
-    public Query query() {
-        // 从计时器中实时获取进度条时间
-        int progressSec;
-        int duration = track.getDuration();
-
-        // 全民 K 歌使用 C# 端传递的精确进度
-        String platform = audioService.getCurrentPlatform();
-
-        if ("wesing".equals(platform) && audioService.getProgressSeconds() >= 0) {
-            progressSec = audioService.getProgressSeconds();
-            if (audioService.getTotalSeconds() > 0) {
-                duration = audioService.getTotalSeconds();
-            }
-        } else {
-            progressSec = Math.toIntExact(stopWatch.getTime(TimeUnit.SECONDS));
-        }
-
-        // 防止未知异常情况，不要除以 0 就行
-        if (duration <= 0) {
-            duration = 5 * 60;
-        }
-
-        player.setSeekbarCurrentPosition(progressSec);
-        player.setSeekbarCurrentPositionHuman(TimeUtil.getFormattedDuration(progressSec));
-        player.setStatePercent((double) progressSec / duration);
-
-        return new Query(player, track);
-    }
-
-    /**
      * 监听音乐状态被更新的事件
      * @param event
      */
@@ -126,10 +92,10 @@ public class NowPlayingService {
                     boolean hadSong = player.getHasSong();
                     player = new Player();
                     track = new Track();
-                    stopWatch.reset();
+                    timer.reset();
                     prevWindowTitle = "";
                     prevIsPaused = true;
-                    prevWeSingProgressSeconds = WESING_PROGRESS_RESET;
+                    prevCSharpProgressSeconds = CSHARP_PROGRESS_RESET;
 
                     // 如果之前有歌曲，发布事件通知前端清除歌词和播放状态
                     if (hadSong) {
@@ -161,34 +127,8 @@ public class NowPlayingService {
         }
 
         if (windowTitle.equals(prevWindowTitle)) {  // 窗口标题不变（没切歌），无需查询歌曲信息
-            // 全民 K 歌：检测重唱（进度大幅回跳）
-            if ("wesing".equals(audioService.getCurrentPlatform())) {
-                int weSingProgress = audioService.getProgressSeconds();
-                if (weSingProgress >= 0 && prevWeSingProgressSeconds > 3 && weSingProgress < prevWeSingProgressSeconds - 2) {
-                    log.info("检测到全民 K 歌重唱/切歌，进度从 {}s 回跳到 {}s", prevWeSingProgressSeconds, weSingProgress);
-                    stopWatch.reset();
-                    stopWatch.start();
-                    eventPublisher.publishEvent(new PlayerProgressReplayEvent(this, "播放器重新播放"));
-                    lyricService.forceRefreshLyric();
-                }
-                // 从自然失去进度恢复到有进度（如关闭演唱窗口后选同名歌曲），强制刷新歌词并清空封面
-                // 仅 WESING_PROGRESS_NONE（自然失去进度）时触发，WESING_PROGRESS_RESET（切歌重置）不触发
-                if (weSingProgress >= 0 && prevWeSingProgressSeconds == WESING_PROGRESS_NONE) {
-                    log.info("检测到全民 K 歌同名歌曲恢复，强制刷新歌词并清空封面");
-                    stopWatch.reset();
-                    stopWatch.start();
-                    // 同名歌曲切换时窗口标题不变，无法重新搜索，旧封面可能是错的，清空
-                    track.setCover("");
-                    eventPublisher.publishEvent(new TrackChangedEvent(this, "同名歌曲封面重置"));
-                    eventPublisher.publishEvent(new PlayerProgressReplayEvent(this, "播放器重新播放"));
-                    lyricService.forceRefreshLyric();
-                }
-                // C# 秒数变化时，向前端推送进度同步，让前端用 C# 的实际进度校准本地计时器
-                if (weSingProgress >= 0 && weSingProgress != prevWeSingProgressSeconds) {
-                    eventPublisher.publishEvent(new PlayerProgressSyncEvent(this, "播放器进度同步"));
-                }
-                prevWeSingProgressSeconds = weSingProgress;
-            }
+            // 处理 C# 端精确进度更新（检测重唱、同名歌曲恢复、进度同步）
+            handleCSharpProgressUpdate();
 
             // 如果状态是暂停，则让进度条暂停；否则，让进度条前进
             if (isPaused) {
@@ -197,9 +137,9 @@ public class NowPlayingService {
                 advanceSeekbar();
             }
         } else {  // 窗口标题改变（切歌了），需要查询歌曲信息
-            stopWatch.reset();
-            stopWatch.start();
-            prevWeSingProgressSeconds = WESING_PROGRESS_RESET;
+            timer.reset();
+            timer.start();
+            prevCSharpProgressSeconds = CSHARP_PROGRESS_RESET;
 
             log.info("切换歌曲为：" + windowTitle);
 
@@ -268,17 +208,19 @@ public class NowPlayingService {
     }
 
     /**
-     * 返回进度条毫秒值
+     * 获取歌曲当前播放进度的毫秒值（统一的进度读取入口）
      * @return
      */
-    public QueryProgress queryProgress() {
-        // 全民 K 歌使用 C# 端传递的精确进度
-        String platform = audioService.getCurrentPlatform();
+    public long getCurrentProgressMs() {
+        return timer.getTime();
+    }
 
-        if ("wesing".equals(platform) && audioService.getProgressSeconds() >= 0) {
-            return new QueryProgress(audioService.getProgressSeconds() * 1000L);
-        }
-        return new QueryProgress(stopWatch.getTime());
+    /**
+     * 返回歌曲信息
+     * @return
+     */
+    public Query query() {
+        return new Query(queryPlayer(), track);
     }
 
     /**
@@ -287,19 +229,13 @@ public class NowPlayingService {
      */
     public Player queryPlayer() {
         // 从计时器中实时获取进度条时间
-        int progressSec;
+        long progressMs = getCurrentProgressMs();
+        int progressSec = (int) (progressMs / 1000);
         int duration = track.getDuration();
 
-        // 全民 K 歌使用 C# 端传递的精确进度
-        String platform = audioService.getCurrentPlatform();
-
-        if ("wesing".equals(platform) && audioService.getProgressSeconds() >= 0) {
-            progressSec = audioService.getProgressSeconds();
-            if (audioService.getTotalSeconds() > 0) {
-                duration = audioService.getTotalSeconds();
-            }
-        } else {
-            progressSec = Math.toIntExact(stopWatch.getTime(TimeUnit.SECONDS));
+        // 如果 C# 端提供了歌曲总时长，则使用 C# 端的值
+        if (audioService.getTotalSeconds() > 0) {
+            duration = audioService.getTotalSeconds();
         }
 
         // 防止未知异常情况，不要除以 0 就行
@@ -320,6 +256,14 @@ public class NowPlayingService {
      */
     public Track queryTrack() {
         return track;
+    }
+
+    /**
+     * 返回进度条毫秒值
+     * @return
+     */
+    public QueryProgress queryProgress() {
+        return new QueryProgress(getCurrentProgressMs());
     }
 
     /**
@@ -344,11 +288,11 @@ public class NowPlayingService {
      */
     @EventListener
     public void handleSettingsGeneralChange(SettingsGeneralChangedEvent event) {
-        // 如果通用设置被修改，则将歌曲信息和 prevWindowTitle 清空
+        // 清空歌曲状态
         player = new Player();
         track = new Track();
         prevWindowTitle = "";
-        prevWeSingProgressSeconds = WESING_PROGRESS_RESET;
+        prevCSharpProgressSeconds = CSHARP_PROGRESS_RESET;
     }
 
     /**
@@ -371,27 +315,61 @@ public class NowPlayingService {
         otherPlatforms.put("miebo", "咩播");
         otherPlatforms.put("yesplay", "YesPlayMusic");
         otherPlatforms.put("cider", "Cider");
-        otherPlatforms.put("wesing", "全民K歌");
+    }
+
+    /**
+     * 处理 C# 端精确进度的更新（检测重唱、同名歌曲恢复、进度同步）
+     * 适用于所有支持 C# 端精确进度的平台，对于不提供精确进度的平台会自动跳过
+     */
+    private void handleCSharpProgressUpdate() {
+        int csharpProgress = audioService.getProgressSeconds();
+
+        // 检测重唱（进度大幅回跳）
+        if (csharpProgress >= 0 && prevCSharpProgressSeconds > 3 && csharpProgress < prevCSharpProgressSeconds - 2) {
+            log.info("检测到重唱/切歌，进度从 {}s 回跳到 {}s", prevCSharpProgressSeconds, csharpProgress);
+            timer.reset();
+            timer.start();
+            eventPublisher.publishEvent(new PlayerProgressReplayEvent(this, "播放器重新播放"));
+            lyricService.forceRefreshLyric();
+        }
+
+        // 从自然失去进度恢复到有进度（如关闭演唱窗口后选同名歌曲），强制刷新歌词并清空封面
+        // 仅 CSHARP_PROGRESS_NONE（自然失去进度）时触发，CSHARP_PROGRESS_RESET（切歌重置）不触发
+        if (csharpProgress >= 0 && prevCSharpProgressSeconds == CSHARP_PROGRESS_NONE) {
+            log.info("检测到同名歌曲恢复，强制刷新歌词并清空封面");
+            timer.reset();
+            timer.start();
+            // 同名歌曲切换时窗口标题不变，无法重新搜索，旧封面可能是错的，清空
+            track.setCover("");
+            eventPublisher.publishEvent(new TrackChangedEvent(this, "同名歌曲封面重置"));
+            eventPublisher.publishEvent(new PlayerProgressReplayEvent(this, "播放器重新播放"));
+            lyricService.forceRefreshLyric();
+        }
+
+        // C# 秒数变化时，用 C# 的实际进度校准计时器，并向前端推送进度同步
+        if (csharpProgress >= 0 && csharpProgress != prevCSharpProgressSeconds) {
+            timer.setTime(csharpProgress * 1000L);
+            eventPublisher.publishEvent(new PlayerProgressSyncEvent(this, "播放器进度同步"));
+        }
+
+        prevCSharpProgressSeconds = csharpProgress;
     }
 
     /**
      * 进度条前进
      */
     private void advanceSeekbar() {
-        // 如果没启动过（UNSTARTED），播放时应启动
-        if (!stopWatch.isStarted()) {
-            stopWatch.start();
-        } else if (stopWatch.isSuspended()) {
-            stopWatch.resume();
+        if (!timer.isRunning()) {
+            timer.start();
         }
 
-        long progressMs = stopWatch.getTime();
-        long durationMs = track.getDuration() * 1000;
+        long progressMs = timer.getTime();
+        long durationMs = track.getDuration() * 1000L;
 
         // 一般发生在单曲循环情况下
         if (progressMs >= durationMs - 300 && durationMs > 0) {
-            stopWatch.reset();
-            stopWatch.start();
+            timer.reset();
+            timer.start();
 
             // 发布事件，通知变化
             eventPublisher.publishEvent(new PlayerProgressReplayEvent(this, "播放器重新播放"));
@@ -402,10 +380,8 @@ public class NowPlayingService {
      * 进度条暂停
      */
     private void pauseSeekbar() {
-        // StopWatch 只有在 RUNNING 时才能 suspend，否则会抛出异常
-        // RUNNING 状态的判定：started && !stopped && !suspended
-        if (stopWatch.isStarted() && !stopWatch.isStopped() && !stopWatch.isSuspended()) {
-            stopWatch.suspend();
+        if (timer.isRunning()) {
+            timer.pause();
         }
     }
 

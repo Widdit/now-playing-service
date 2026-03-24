@@ -455,7 +455,7 @@ public class LyricService {
     }
 
     /**
-     * 强制刷新歌词（由 WeSingService 的 WatchService 调用）
+     * 强制刷新歌词
      * 清除缓存标记，重新获取歌词并发布事件
      */
     public void forceRefreshLyric() {
@@ -470,7 +470,7 @@ public class LyricService {
                 return;
             }
 
-            log.info("强制刷新歌词（WatchService 触发）: {}", windowTitle);
+            log.info("强制刷新歌词: {}", windowTitle);
 
             // 清除缓存标记，强制重新获取
             this.currentLyricWindowTitle = null;
