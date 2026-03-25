@@ -39,6 +39,8 @@ public class SettingsLyric {
 
     private Double alignPosition = 0.5;
 
+    private String alignAnchor = "center";
+
     private Boolean hidePassedLines = false;
 
     private Boolean backgroundEnabled = true;
