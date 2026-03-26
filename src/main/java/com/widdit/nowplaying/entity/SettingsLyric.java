@@ -71,6 +71,12 @@ public class SettingsLyric {
 
     private String noLyricText = "纯音乐，请欣赏";
 
+    private Boolean currentLyricEnhanced = false;
+
+    private Double lyricBaseOpacity = 0.4;
+
+    private Double subLineOpacity = 0.3;
+
     private Double opacity = 1.0;
 
     private Double brightness = 1.0;
