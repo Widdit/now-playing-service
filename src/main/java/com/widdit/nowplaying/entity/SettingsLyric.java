@@ -77,6 +77,8 @@ public class SettingsLyric {
 
     private Double subLineOpacity = 0.3;
 
+    private Boolean hideOnPause = false;
+
     private Double opacity = 1.0;
 
     private Double brightness = 1.0;
