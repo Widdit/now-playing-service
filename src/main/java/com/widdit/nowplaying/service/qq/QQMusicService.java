@@ -58,16 +58,23 @@ public class QQMusicService {
         }
 
         // 缓存未命中，执行网络请求逻辑
-        // 构建请求参数
-        Map<String, String> params = new HashMap<>();
-        params.put("w", keyword);
-        params.put("p", "1");
-        params.put("n", "8");
-        params.put("cr", "1");
-        params.put("format", "json");
+        // 构建请求体
+        JSONObject param = new JSONObject();
+        param.put("search_type", 0);
+        param.put("query", keyword);
+        param.put("page_num", 1);
+        param.put("num_per_page", 8);
+
+        JSONObject req1 = new JSONObject();
+        req1.put("method", "DoSearchForQQMusicDesktop");
+        req1.put("module", "music.search.SearchCgiService");
+        req1.put("param", param);
+
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("req_1", req1);
 
         // 发送搜索歌曲请求
-        String respStr = sendGetRequest("http://c.y.qq.com/soso/fcgi-bin/client_search_cp", params);
+        String respStr = sendPostRequest("https://u.y.qq.com/cgi-bin/musicu.fcg", requestBody.toJSONString());
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
@@ -78,7 +85,7 @@ public class QQMusicService {
         }
 
         // 提取所需字段
-        JSONArray songs = jsonObject.getJSONObject("data").getJSONObject("song").getJSONArray("list");
+        JSONArray songs = jsonObject.getJSONObject("req_1").getJSONObject("data").getJSONObject("body").getJSONObject("song").getJSONArray("list");
 
         // 检查数组是否为空
         if (songs == null || songs.isEmpty()) {
@@ -102,7 +109,7 @@ public class QQMusicService {
             JSONObject song = songs.getJSONObject(index);
 
             // 提取歌曲标题
-            String songTitle = song.getString("songname");
+            String songTitle = song.getString("title");
 
             // 提取歌手名
             JSONArray artists = song.getJSONArray("singer");
@@ -132,7 +139,7 @@ public class QQMusicService {
         }
 
         // 从最佳匹配的歌曲中提取最终信息
-        String title = bestMatchSong.getString("songname");
+        String title = bestMatchSong.getString("title");
 
         JSONArray artists = bestMatchSong.getJSONArray("singer");
         StringBuilder authorBuilder = new StringBuilder();
@@ -144,9 +151,9 @@ public class QQMusicService {
         }
         String author = authorBuilder.toString();
 
-        String id = bestMatchSong.getString("songid");
-        String album = bestMatchSong.getString("albumname");
-        String albumMid = bestMatchSong.getString("albummid");
+        String id = bestMatchSong.getString("id");
+        String album = bestMatchSong.getJSONObject("album").getString("name");
+        String albumMid = bestMatchSong.getJSONObject("album").getString("mid");
         Integer duration = bestMatchSong.getInteger("interval");
 
         // 计算出格式化的时长
@@ -370,6 +377,34 @@ public class QQMusicService {
                 .header("Referer", referer)
                 .method(Connection.Method.GET)
                 .data(params)
+                .ignoreContentType(true)
+                .timeout(10000)
+                .execute();
+
+        return response.body();
+    }
+
+    /**
+     * 发送 POST 请求
+     * @param url 请求 URL
+     * @param body 请求体 JSON 字符串
+     * @return 响应 JSON 字符串
+     */
+    private String sendPostRequest(String url, String body) throws Exception {
+        URL parsedUrl = new URL(url);
+        String host = parsedUrl.getHost();
+        String referer = parsedUrl.getProtocol() + "://" + host + "/";
+
+        Connection.Response response = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36")
+                .header("Accept", "*/*")
+                .header("Cache-Control", "no-cache")
+                .header("Connection", "keep-alive")
+                .header("Host", host)
+                .header("Referer", referer)
+                .header("Content-Type", "application/json")
+                .method(Connection.Method.POST)
+                .requestBody(body)
                 .ignoreContentType(true)
                 .timeout(10000)
                 .execute();
