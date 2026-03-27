@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
@@ -175,13 +176,15 @@ public class KuGouMusicService {
      * @throws IOException
      */
     private String sendGetRequest(String url) throws IOException {
-        Connection.Response
-                response = Jsoup.connect(url)
+        URL parsedUrl = new URL(url);
+        String host = parsedUrl.getHost();
+
+        Connection.Response response = Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:57.0) Gecko/20100101 Firefox/57.0")
                 .header("Accept", "*/*")
                 .header("Cache-Control", "no-cache")
                 .header("Connection", "keep-alive")
-                .header("Host", "songsearch.kugou.com")
+                .header("Host", host)
                 .header("Accept-Language", "zh-CN,en-US;q=0.7,en;q=0.3")
                 .header("DNT", "1")
                 .header("Pragma", "no-cache")

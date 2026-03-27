@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -356,13 +357,17 @@ public class QQMusicService {
      * @return 响应 JSON 字符串
      */
     private String sendGetRequest(String url, Map<String, String> params) throws Exception {
+        URL parsedUrl = new URL(url);
+        String host = parsedUrl.getHost();
+        String referer = parsedUrl.getProtocol() + "://" + host + "/";
+
         Connection.Response response = Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.132 Safari/537.36")
                 .header("Accept", "*/*")
                 .header("Cache-Control", "no-cache")
                 .header("Connection", "keep-alive")
-                .header("Host", "c.y.qq.com")
-                .header("Referer", "https://c.y.qq.com/")
+                .header("Host", host)
+                .header("Referer", referer)
                 .method(Connection.Method.GET)
                 .data(params)
                 .ignoreContentType(true)
