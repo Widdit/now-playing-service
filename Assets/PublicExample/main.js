@@ -1104,4 +1104,4 @@ async function pollData() {
 
 // 启动轮询
 setInterval(pollData, POLL_INTERVAL);
-pollData();
+await pollData();
