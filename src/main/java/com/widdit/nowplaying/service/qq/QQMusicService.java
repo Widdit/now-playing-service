@@ -231,12 +231,25 @@ public class QQMusicService {
             return lyric;
         }
 
-        // 2. 获取原始歌词与翻译歌词
+        // 2. 获取逐字歌词与翻译歌词
+        QrcLyric qrcLyric = getQrcLyric(id);
+
+        if (!StringUtils.isBlank(qrcLyric.getQrc())) {
+            lyric.setHasKaraokeLyric(true);
+            lyric.setKaraokeLyric(qrcLyric.getQrc());
+        }
+
+        if (!StringUtils.isBlank(qrcLyric.getTrans())) {
+            lyric.setHasTranslatedLyric(true);
+            lyric.setTranslatedLyric(qrcLyric.getTrans());
+        }
+
+        // 3. 获取原始歌词
         // 构建请求参数
         Map<String, String> params = new HashMap<>();
         params.put("musicid", id);
         params.put("callback", "MusicJsonCallback_lrc");
-        params.put("pcachetime", "1767011156214");
+        params.put("pcachetime", String.valueOf(System.currentTimeMillis()));
         params.put("g_tk", "5381");
         params.put("jsonpCallback", "MusicJsonCallback_lrc");
         params.put("loginUin", "0");
@@ -264,24 +277,22 @@ public class QQMusicService {
             throw new RuntimeException("获取原始歌词失败（id = " + id + "）：响应结果的 code 为 " + retCode);
         }
 
-        // 响应结果不包含 lyric 字段或响应码为 -1901
         // -1901 为一个特殊的 code，它并不代表 API 请求错误，而是 QQ 音乐没有歌词，因此需要特殊处理，不抛出异常
-        if (!jsonObject.containsKey("lyric") || retCode == -1901) {
-            log.info("QQ 歌词获取成功（匹配度：{}%，该歌曲无歌词）", similarity);
-            return lyric;
+        if (jsonObject.containsKey("lyric") && retCode != -1901) {
+            // 提取原始歌词
+            String lrc = jsonObject.getString("lyric");
+            if (lrc != null && !lrc.isBlank() && lrc.contains("00") && !lrc.contains("此歌曲为没有填词的纯音乐")) {
+                lyric.setHasLyric(true);
+                lyric.setLrc(lrc);
+            }
         }
 
-        // 提取原始歌词
-        String lrc = jsonObject.getString("lyric");
-        if (lrc == null || "".equals(lrc) || !lrc.contains("00") || lrc.contains("此歌曲为没有填词的纯音乐")) {
-            log.info("QQ 歌词获取成功（匹配度：{}%，该歌曲无歌词）", similarity);
-            return lyric;
-        }
-        lyric.setHasLyric(true);
-        lyric.setLrc(lrc);
-
-        // 提取翻译歌词
-        if (jsonObject.containsKey("trans")) {
+        // 提取翻译歌词（兼容处理）
+        // 说明：
+        // 1. 自 2026 年 3 月起，QQ 音乐该接口不再返回翻译歌词（可能是为了减少网络开销）
+        // 2. 多数歌曲已通过 QRC 歌词提供完整信息（含逐字 + 翻译）
+        // 3. 为兼容仍返回翻译歌词的情况，此处保留兜底判断
+        if (!lyric.getHasTranslatedLyric() && jsonObject.containsKey("trans")) {
             String translatedLyric = jsonObject.getString("trans");
             if (!StringUtils.isBlank(translatedLyric)) {
                 lyric.setHasTranslatedLyric(true);
@@ -289,20 +300,17 @@ public class QQMusicService {
             }
         }
 
-        // 3. 获取逐字歌词
-        String karaokeLyric = getQrcLyric(id);
-        if (!StringUtils.isBlank(karaokeLyric)) {
-            lyric.setHasKaraokeLyric(true);
-            lyric.setKaraokeLyric(karaokeLyric);
+        if (lyric.getHasKaraokeLyric() || lyric.getHasLyric()) {
+            log.info("QQ 歌词获取成功（匹配度：{}%）", similarity);
+        } else {
+            log.info("QQ 歌词获取成功（匹配度：{}%，该歌曲无歌词）", similarity);
         }
-
-        log.info("QQ 歌词获取成功（匹配度：{}%）", similarity);
 
         return lyric;
     }
 
     /**
-     * 获取 QRC 逐字歌词（XML 格式）
+     * 获取 QRC 逐字歌词（含翻译歌词）
      *
      * 原作者：WXRIW
      * 代码链接：https://github.com/WXRIW/Lyricify-Lyrics-Helper/blob/master/Lyricify.Lyrics.Helper/Providers/Web/QQMusic/Api.cs
@@ -311,9 +319,9 @@ public class QQMusicService {
      * 修改者：Widdit
      *
      * @param songid 歌曲 ID
-     * @return 解密后的 QRC 逐字歌词（XML 格式）
+     * @return 包含解密后的 QRC 逐字歌词和翻译歌词的 QrcLyric 对象
      */
-    public String getQrcLyric(String songid) {
+    public QrcLyric getQrcLyric(String songid) {
         try {
             // 构建请求参数
             Map<String, String> params = new HashMap<>();
@@ -332,16 +340,17 @@ public class QQMusicService {
             Document doc = Decrypter.createXmlDocument(resp);
             Decrypter.recursionFindElement(doc.getDocumentElement(), VERBATIM_XML_MAPPING_DICT, dict);
 
-            // 只查找原始歌词节点 "orig"
+            QrcLyric qrcLyric = new QrcLyric();
+
+            // 提取逐字歌词节点 "orig"
             if (dict.containsKey("orig")) {
                 String text = Decrypter.getNodeText(dict.get("orig"));
 
-                if (text != null && !text.trim().isEmpty()) {
+                if (text != null && !text.isBlank()) {
                     try {
                         String decompressText = Decrypter.decryptLyrics(text);
-                        if (decompressText != null && !decompressText.trim().isEmpty()) {
-                            // 直接返回 XML 格式的歌词字符串
-                            return decompressText;
+                        if (decompressText != null && !decompressText.isBlank()) {
+                            qrcLyric.setQrc(decompressText);
                         }
                     } catch (Exception e) {
                         log.error("解密 QRC 歌词失败（id = {}）：{}", songid, e.getMessage());
@@ -349,11 +358,22 @@ public class QQMusicService {
                 }
             }
 
-            return null;
+            // 提取翻译歌词节点 "ts"
+            if (dict.containsKey("ts")) {
+                String text = Decrypter.getNodeText(dict.get("ts"));
+
+                if (text != null && !text.isBlank()) {
+                    // 去除影响美观的 "//" 标记
+                    text = text.replace("//", "");
+                    qrcLyric.setTrans(text);
+                }
+            }
+
+            return qrcLyric;
 
         } catch (Exception e) {
             log.error("获取 QRC 逐字歌词失败（id = {}）：{}", songid, e.getMessage());
-            return null;
+            return new QrcLyric();
         }
     }
 
