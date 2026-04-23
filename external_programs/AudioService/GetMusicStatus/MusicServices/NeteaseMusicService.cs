@@ -1,9 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Interop.UIAutomationClient;
 using CSCore.CoreAudioAPI;
 
 public class NeteaseMusicService : MusicService
 {
+    private const bool PRINT_EXCEPTION_LOG = false;
+
+    private const int UIA_ProcessIdPropertyId = 30002;
+    private const int UIA_ControlTypePropertyId = 30003;
+    private const int UIA_TextControlTypeId = 50020;
+
+    private IUIAutomation _automation;
+
+    // 用于"音量为 0 时通过进度变化判断播放/暂停"的兜底
+    private int _lastProgressSeconds = -1;
+    private DateTime _lastProgressChangeTime = DateTime.MinValue;
+
     public override string GetMusicStatus(AudioSessionManager2 sessionManager)
     {
         double volume = 0;
@@ -99,8 +114,43 @@ public class NeteaseMusicService : MusicService
 
         windowTitle = FixTitleNetease(windowTitle);
 
+        // 通过 UI Automation 读取进度（失败时保持 -1，不输出 Progress 行）
+        int currentSec = -1;
+        int totalSec = -1;
+        try
+        {
+            ReadProgressViaUIA(out currentSec, out totalSec);
+        }
+        catch (Exception ex)
+        {
+            if (PRINT_EXCEPTION_LOG)
+            {
+                Console.WriteLine($"【网易云】读取进度时发生UI Automation异常：");
+                Console.WriteLine($"异常消息：{ex.Message}");
+                Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                Console.WriteLine("----------------------------------------");
+            }
+        }
+
+        // 判断播放状态：
+        // 优先用音量（反映是否真的在出声）；若音量为 0 但进度最近有变化，则仍视为 Playing
+        // （用户拖动进度条、或系统静音等场景下，volume=0 但进度在跳动）
+        string status;
+        if (volume > 0.00001)
+        {
+            status = "Playing";
+            UpdateProgressChangeTracker(currentSec);
+        }
+        else
+        {
+            status = IsProgressChangingRecently(currentSec) ? "Playing" : "Paused";
+        }
+
         // 输出结果
-        string status = volume > 0.00001 ? "Playing" : "Paused";
+        if (currentSec >= 0 && totalSec > 0)
+        {
+            return $"{status}\r\n{windowTitle}\r\nProgress:{currentSec}|{totalSec}";
+        }
         return $"{status}\r\n{windowTitle}";
     }
 
@@ -110,5 +160,339 @@ public class NeteaseMusicService : MusicService
     private string FixTitleNetease(string windowTitle)
     {
         return windowTitle.Replace("/", " / ");
+    }
+
+    /// <summary>
+    /// 通过 UI Automation 从网易云主播放窗口读取进度文本
+    /// 优先匹配形如 "MM:SS / MM:SS" 或 "MM:SS | MM:SS" 的单个文本元素
+    /// </summary>
+    private void ReadProgressViaUIA(out int currentSec, out int totalSec)
+    {
+        currentSec = -1;
+        totalSec = -1;
+
+        IUIAutomationElement window = null;
+        try
+        {
+            window = FindNeteasePlayerWindow();
+            if (window == null)
+            {
+                return;
+            }
+
+            ParseProgressFromWindow(window, out currentSec, out totalSec);
+        }
+        finally
+        {
+            ReleaseComObject(window);
+        }
+    }
+
+    /// <summary>
+    /// 在所有 cloudmusic 进程中查找标题包含 " - " 的主播放窗口，返回其 UIA 根节点
+    /// </summary>
+    private IUIAutomationElement FindNeteasePlayerWindow()
+    {
+        IUIAutomationElement result = null;
+        IUIAutomationElement desktop = null;
+        IUIAutomationCondition pidCondition = null;
+        IUIAutomationElementArray windows = null;
+
+        try
+        {
+            Process[] processes = Process.GetProcessesByName("cloudmusic");
+            if (processes.Length == 0)
+            {
+                return null;
+            }
+
+            IUIAutomation automation = GetAutomation();
+            desktop = automation.GetRootElement();
+
+            foreach (Process proc in processes)
+            {
+                int pid = proc.Id;
+                proc.Dispose();
+
+                if (result != null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    ReleaseComObject(pidCondition);
+                    ReleaseComObject(windows);
+                    pidCondition = automation.CreatePropertyCondition(UIA_ProcessIdPropertyId, pid);
+                    windows = desktop.FindAll(TreeScope.TreeScope_Children, pidCondition);
+
+                    int count = windows.Length;
+                    for (int i = 0; i < count; i++)
+                    {
+                        IUIAutomationElement win = null;
+                        try
+                        {
+                            win = windows.GetElement(i);
+                            string name = win.CurrentName;
+                            if (!string.IsNullOrEmpty(name) && name.Contains(" - ") && !name.Contains("MediaPlayer"))
+                            {
+                                result = win;
+                                win = null;
+                                break;
+                            }
+                        }
+                        catch (Exception)
+                        {
+                        }
+                        finally
+                        {
+                            ReleaseComObject(win);
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (PRINT_EXCEPTION_LOG)
+            {
+                Console.WriteLine($"【网易云】查找播放窗口时发生异常：");
+                Console.WriteLine($"异常消息：{ex.Message}");
+                Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                Console.WriteLine("----------------------------------------");
+            }
+        }
+        finally
+        {
+            ReleaseComObject(windows);
+            ReleaseComObject(pidCondition);
+            ReleaseComObject(desktop);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 在窗口 UIA 子树内搜索 Text 控件，解析进度文本
+    /// </summary>
+    private void ParseProgressFromWindow(IUIAutomationElement root, out int currentSec, out int totalSec)
+    {
+        currentSec = -1;
+        totalSec = -1;
+
+        IUIAutomationCondition textCondition = null;
+        IUIAutomationElementArray textElements = null;
+
+        try
+        {
+            IUIAutomation automation = GetAutomation();
+            textCondition = automation.CreatePropertyCondition(UIA_ControlTypePropertyId, UIA_TextControlTypeId);
+            textElements = root.FindAll(TreeScope.TreeScope_Descendants, textCondition);
+
+            int count = textElements.Length;
+            for (int i = 0; i < count; i++)
+            {
+                IUIAutomationElement elem = null;
+                try
+                {
+                    elem = textElements.GetElement(i);
+                    string name = elem.CurrentName;
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        continue;
+                    }
+
+                    if (TryParseProgressText(name, out currentSec, out totalSec))
+                    {
+                        return;
+                    }
+                }
+                catch (Exception)
+                {
+                }
+                finally
+                {
+                    ReleaseComObject(elem);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (PRINT_EXCEPTION_LOG)
+            {
+                Console.WriteLine($"【网易云】解析进度文本时发生UI Automation异常：");
+                Console.WriteLine($"异常消息：{ex.Message}");
+                Console.WriteLine($"堆栈跟踪：{ex.StackTrace}");
+                Console.WriteLine("----------------------------------------");
+            }
+        }
+        finally
+        {
+            ReleaseComObject(textElements);
+            ReleaseComObject(textCondition);
+        }
+    }
+
+    /// <summary>
+    /// 解析形如 "MM:SS / MM:SS"、"MM:SS|MM:SS" 的进度字符串
+    /// 要求：分隔符两侧都能解析为 MM:SS，且 current &lt;= total
+    /// </summary>
+    private bool TryParseProgressText(string text, out int currentSec, out int totalSec)
+    {
+        currentSec = -1;
+        totalSec = -1;
+
+        string cleaned = text.Replace(" ", "");
+
+        int sepIndex = cleaned.IndexOf('/');
+        if (sepIndex < 0)
+        {
+            sepIndex = cleaned.IndexOf('|');
+        }
+        if (sepIndex <= 0 || sepIndex >= cleaned.Length - 1)
+        {
+            return false;
+        }
+
+        string currentPart = cleaned.Substring(0, sepIndex);
+        string totalPart = cleaned.Substring(sepIndex + 1);
+
+        if (!TryParseTimeString(currentPart, out int c) || !TryParseTimeString(totalPart, out int t))
+        {
+            return false;
+        }
+
+        if (t <= 0 || c < 0 || c > t + 2)
+        {
+            // total 必须为正，current 不应显著大于 total（留 2 秒容差应对边界取整）
+            return false;
+        }
+
+        currentSec = c;
+        totalSec = t;
+        return true;
+    }
+
+    private bool TryParseTimeString(string timeStr, out int seconds)
+    {
+        seconds = 0;
+        string[] parts = timeStr.Split(':');
+        if (parts.Length != 2) return false;
+
+        if (int.TryParse(parts[0], out int minutes) && int.TryParse(parts[1], out int secs))
+        {
+            if (minutes < 0 || secs < 0 || secs >= 60) return false;
+            seconds = minutes * 60 + secs;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// 记录进度变化时间戳（在音量 > 0 的情况下也要更新，保证从"有声播放"切到"静音播放"时不误判为暂停）
+    /// </summary>
+    private void UpdateProgressChangeTracker(int currentSec)
+    {
+        if (currentSec < 0) return;
+        if (currentSec != _lastProgressSeconds)
+        {
+            _lastProgressSeconds = currentSec;
+            _lastProgressChangeTime = DateTime.Now;
+        }
+    }
+
+    /// <summary>
+    /// 在音量为 0 的情况下用于兜底：若进度刚刚发生变化（1.5 秒内），仍认为在播放
+    /// </summary>
+    private bool IsProgressChangingRecently(int currentSec)
+    {
+        if (currentSec < 0) return false;
+
+        if (currentSec != _lastProgressSeconds)
+        {
+            _lastProgressSeconds = currentSec;
+            _lastProgressChangeTime = DateTime.Now;
+            return true;
+        }
+
+        return (DateTime.Now - _lastProgressChangeTime).TotalMilliseconds <= 1500;
+    }
+
+    private IUIAutomation GetAutomation()
+    {
+        if (_automation != null)
+        {
+            return _automation;
+        }
+
+        try
+        {
+            _automation = (IUIAutomation)new CUIAutomation8();
+            return _automation;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            _automation = (IUIAutomation)new CUIAutomation();
+            return _automation;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Type automationType = Type.GetTypeFromCLSID(new Guid("E22AD333-B25F-460C-83D0-0581107395C9"));
+            if (automationType != null)
+            {
+                _automation = Activator.CreateInstance(automationType) as IUIAutomation;
+                if (_automation != null)
+                {
+                    return _automation;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Type automationType = Type.GetTypeFromCLSID(new Guid("FF48DBA4-60EF-4201-AA87-54103EEF594E"));
+            if (automationType != null)
+            {
+                _automation = Activator.CreateInstance(automationType) as IUIAutomation;
+                if (_automation != null)
+                {
+                    return _automation;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        throw new InvalidOperationException("无法创建 UI Automation COM 对象（CUIAutomation8/CUIAutomation）。");
+    }
+
+    private void ReleaseComObject(object comObject)
+    {
+        if (comObject != null && Marshal.IsComObject(comObject))
+        {
+            try
+            {
+                Marshal.FinalReleaseComObject(comObject);
+            }
+            catch
+            {
+            }
+        }
     }
 }
