@@ -9,6 +9,16 @@ public class NeteaseMusicService : MusicService
 {
     private const bool PRINT_EXCEPTION_LOG = false;
 
+    // 拖动进度条时，网易云可能短暂断开音频会话 / UIA 读取瞬时失败，
+    // 这会让本服务返回 "None" —— 进而触发 Java 端 NowPlayingService.java:338
+    // 的"同名歌曲恢复"分支（cover 清空 + TrackChanged + PlayerProgressReplay），
+    // 在前端表现为进度条归零 + 歌曲信息重刷。
+    // 解决思路：若某次轮询的结果为 "None"，但最近 1.5s 内曾经输出过有效结果，
+    // 就继续沿用那份旧输出，等真正闭屏再返回 None，避免把瞬时失联放大成可见事件。
+    private const int NONE_HOLDOVER_MS = 1500;
+    private string _lastGoodOutput = null;
+    private DateTime _lastGoodOutputAt = DateTime.MinValue;
+
     private const int UIA_ProcessIdPropertyId = 30002;
     private const int UIA_ControlTypePropertyId = 30003;
     private const int UIA_TextControlTypeId = 50020;
@@ -65,7 +75,7 @@ public class NeteaseMusicService : MusicService
         }
         catch (Exception)
         {
-            return "None";
+            return ApplyHoldover("None");
         }
         finally
         {
@@ -76,7 +86,7 @@ public class NeteaseMusicService : MusicService
         // 未检测到音乐软件进程
         if (!musicAppRunning)
         {
-            return "None";
+            return ApplyHoldover("None");
         }
 
         // 这段代码处理三种特殊情况：
@@ -103,13 +113,13 @@ public class NeteaseMusicService : MusicService
         }
         catch (Exception)
         {
-            return "None";
+            return ApplyHoldover("None");
         }
 
         // 如果窗口标题为空（说明没成功获取到），则返回 None
         if (string.IsNullOrEmpty(windowTitle))
         {
-            return "None";
+            return ApplyHoldover("None");
         }
 
         windowTitle = FixTitleNetease(windowTitle);
@@ -147,11 +157,34 @@ public class NeteaseMusicService : MusicService
         }
 
         // 输出结果
-        if (currentSec >= 0 && totalSec > 0)
+        string result = (currentSec >= 0 && totalSec > 0)
+            ? $"{status}\r\n{windowTitle}\r\nProgress:{currentSec}|{totalSec}"
+            : $"{status}\r\n{windowTitle}";
+        return ApplyHoldover(result);
+    }
+
+    /// <summary>
+    /// 对候选输出做"短暂失联抑制"：
+    /// - 有效输出（非 None）→ 直接返回，同时刷新缓存
+    /// - 无效输出（None）→ 若缓存未过期则返回缓存，否则清空缓存并返回 None
+    /// </summary>
+    private string ApplyHoldover(string candidate)
+    {
+        if (candidate != "None")
         {
-            return $"{status}\r\n{windowTitle}\r\nProgress:{currentSec}|{totalSec}";
+            _lastGoodOutput = candidate;
+            _lastGoodOutputAt = DateTime.Now;
+            return candidate;
         }
-        return $"{status}\r\n{windowTitle}";
+
+        if (_lastGoodOutput != null &&
+            (DateTime.Now - _lastGoodOutputAt).TotalMilliseconds < NONE_HOLDOVER_MS)
+        {
+            return _lastGoodOutput;
+        }
+
+        _lastGoodOutput = null;
+        return "None";
     }
 
     /*
