@@ -495,15 +495,20 @@ public class LyricService {
         try {
             String windowTitle = audioService.getWindowTitle();
 
-            // 窗口标题没变，说明歌词已是最新，不需要更新
-            if (windowTitle != null && windowTitle.equals(currentLyricWindowTitle)) {
+            if (windowTitle == null) {
                 return;
             }
 
-            log.info("更新歌词：{}", windowTitle);
+            // 窗口标题没变则跳过网络请求，但仍需发布事件。
+            // 否则：切歌时 getLyric() (走 /api/lyric) 可能先于 handleTrackChange 拿到
+            // fetchLock 并把 currentLyricWindowTitle 更新成新值；待 updateLyric 再拿到锁时
+            // 匹配成功直接 return，前端就收不到 Lyric WebSocket 消息。
+            if (!windowTitle.equals(currentLyricWindowTitle)) {
+                log.info("更新歌词：{}", windowTitle);
 
-            this.lyric = fetchLyric(windowTitle);
-            this.currentLyricWindowTitle = windowTitle;
+                this.lyric = fetchLyric(windowTitle);
+                this.currentLyricWindowTitle = windowTitle;
+            }
 
             // 发布事件，通知变化
             eventPublisher.publishEvent(new LyricChangedEvent(this, "歌词发生改变"));
