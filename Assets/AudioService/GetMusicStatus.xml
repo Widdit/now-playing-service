@@ -4,6 +4,50 @@
         <name>GetMusicStatus</name>
     </assembly>
     <members>
+        <member name="M:NeteaseMusicHelper.ReadProgressViaUIA(System.Int32@,System.Int32@)">
+            <summary>
+            通过 UI Automation 从网易云主播放窗口读取进度文本
+            优先匹配形如 "MM:SS / MM:SS" 或 "MM:SS | MM:SS" 的单个文本元素
+            </summary>
+        </member>
+        <member name="M:NeteaseMusicHelper.FindNeteasePlayerWindow">
+            <summary>
+            在所有 cloudmusic 进程中查找标题包含 " - " 的主播放窗口，返回其 UIA 根节点
+            </summary>
+        </member>
+        <member name="M:NeteaseMusicHelper.ParseProgressFromWindow(Interop.UIAutomationClient.IUIAutomationElement,System.Int32@,System.Int32@)">
+            <summary>
+            在窗口 UIA 子树内搜索 Text 控件，解析进度文本
+            </summary>
+        </member>
+        <member name="M:NeteaseMusicHelper.TryParseProgressText(System.String,System.Int32@,System.Int32@)">
+            <summary>
+            解析形如 "MM:SS / MM:SS"、"MM:SS|MM:SS" 的进度字符串
+            要求：分隔符两侧都能解析为 MM:SS，且 current &lt;= total
+            </summary>
+        </member>
+        <member name="M:NeteaseMusicService.ApplyHoldover(System.String)">
+            <summary>
+            对候选输出做"短暂失联抑制"：
+            - 有效输出（非 None）→ 直接返回，同时刷新缓存
+            - 无效输出（None）→ 若缓存未过期则返回缓存，否则清空缓存并返回 None
+            
+            原因：
+            拖动进度条时，网易云可能短暂断开音频会话 / UIA 读取瞬时失败，这会让本服务返回 "None"
+            解决思路：若某次轮询的结果为 "None"，但最近 1.5s 内曾经输出过有效结果，
+            就继续沿用那份旧输出，等真正闭屏再返回 None，避免把瞬时失联放大成可见事件。
+            </summary>
+        </member>
+        <member name="M:NeteaseMusicService.UpdateProgressChangeTracker(System.Int32)">
+            <summary>
+            记录进度变化时间戳（在音量 > 0 的情况下也要更新，保证从"有声播放"切到"静音播放"时不误判为暂停）
+            </summary>
+        </member>
+        <member name="M:NeteaseMusicService.IsProgressChangingRecently(System.Int32)">
+            <summary>
+            在音量为 0 的情况下用于兜底：若进度刚刚发生变化（1.5 秒内），仍认为在播放
+            </summary>
+        </member>
         <member name="M:WeSingService.FindWeSingWindow">
             <summary>
             查找全民K歌播放窗口的 IUIAutomationElement（标题为 "全民K歌 - {歌曲名}" 的窗口）

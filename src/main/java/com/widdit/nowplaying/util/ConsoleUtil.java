@@ -37,9 +37,8 @@ public class ConsoleUtil {
         // 启动进程
         Process process = processBuilder.start();
 
-        // 获取进程的输入流（即 EXE 程序的输出），C# 侧 Console.OutputEncoding 明确为 UTF-8
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+        // 获取进程的输入流（即 EXE 程序的输出）
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
 
         String line;
         while ((line = reader.readLine()) != null) {
