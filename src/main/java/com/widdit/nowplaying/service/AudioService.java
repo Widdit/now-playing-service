@@ -128,9 +128,8 @@ public class AudioService {
 
             log.info("启动 C# 进程读取音乐状态");
 
-            // 使用线程来异步读取 C# 程序的输出（C# 侧明确以 UTF-8 输出，见 Program.cs 的 Console.OutputEncoding）
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(getMusicStatusProcess.getInputStream(), StandardCharsets.UTF_8));
+            // 使用线程来异步读取 C# 程序的输出
+            BufferedReader reader = new BufferedReader(new InputStreamReader(getMusicStatusProcess.getInputStream(), StandardCharsets.UTF_8));
 
             // 启动一个线程来不断读取 C# 程序的输出
             musicStatusReaderThread = new Thread(() -> {
