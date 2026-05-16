@@ -155,7 +155,13 @@ public class AudioService {
                                 log.debug("解析 Progress 行失败: {}", line);
                             }
                         } else {
-                            windowTitle = line.trim();
+                            String newWindowTitle = line.trim();
+                            // 当窗口标题发生变化（即切歌）时，清空之前的进度信息
+                            if (!newWindowTitle.equals(windowTitle)) {
+                                progressSeconds = -1;
+                                totalSeconds = -1;
+                            }
+                            windowTitle = newWindowTitle;
                         }
 
                         // 发布事件，通知变化

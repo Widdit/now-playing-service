@@ -323,9 +323,11 @@ public class NowPlayingService {
      */
     private void handleCSharpProgressUpdate() {
         int csharpProgress = audioService.getProgressSeconds();
+        String platform = audioService.getCurrentPlatform();
 
-        // 检测重唱（进度大幅回跳）
-        if (csharpProgress >= 0 && prevCSharpProgressSeconds > 3 && csharpProgress < prevCSharpProgressSeconds - 2) {
+        // 检测重唱（进度大幅回跳），仅全民 K 歌平台生效
+        if ("wesing".equals(platform)
+                && csharpProgress >= 0 && prevCSharpProgressSeconds > 3 && csharpProgress < prevCSharpProgressSeconds - 2) {
             log.info("检测到重唱/切歌，进度从 {}s 回跳到 {}s", prevCSharpProgressSeconds, csharpProgress);
             timer.reset();
             timer.start();
@@ -348,11 +350,21 @@ public class NowPlayingService {
 
         // C# 秒数变化时，用 C# 的实际进度校准计时器，并向前端推送进度同步
         if (csharpProgress >= 0 && csharpProgress != prevCSharpProgressSeconds) {
-            timer.setTime(csharpProgress * 1000L);
-            eventPublisher.publishEvent(new PlayerProgressSyncEvent(this, "播放器进度同步"));
+            // 排除从 CSHARP_PROGRESS_NONE 恢复的情况（已在上面处理）
+            // 允许从 CSHARP_PROGRESS_RESET 恢复（切歌后第一次获取到进度）
+            if (prevCSharpProgressSeconds >= 0 || prevCSharpProgressSeconds == CSHARP_PROGRESS_RESET) {
+                timer.setTime(csharpProgress * 1000L);
+                eventPublisher.publishEvent(new PlayerProgressSyncEvent(this, "播放器进度同步"));
+            }
         }
 
-        prevCSharpProgressSeconds = csharpProgress;
+        // 更新 prevCSharpProgressSeconds
+        // 特殊处理：如果当前是切歌状态（CSHARP_PROGRESS_RESET）并且 C# 端无进度（-1），则保持切歌状态
+        if (prevCSharpProgressSeconds == CSHARP_PROGRESS_RESET && csharpProgress == CSHARP_PROGRESS_NONE) {
+            // 保持 CSHARP_PROGRESS_RESET 状态，不更新
+        } else {
+            prevCSharpProgressSeconds = csharpProgress;
+        }
     }
 
     /**
