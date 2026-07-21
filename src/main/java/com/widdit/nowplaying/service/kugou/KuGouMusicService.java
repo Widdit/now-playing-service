@@ -23,7 +23,7 @@ public class KuGouMusicService {
 
     // 缓存相关变量
     private String prevKeyword;
-    private Track prevTrack;
+    private KuGouSong prevSong;
 
     // 锁对象
     private final Object cacheLock = new Object();
@@ -38,13 +38,17 @@ public class KuGouMusicService {
      * @return
      */
     public Track search(String keyword) throws IOException {
+        return searchSong(keyword).getTrack();
+    }
+
+    KuGouSong searchSong(String keyword) throws IOException {
         log.info("获取酷狗音乐歌曲信息..");
 
         // 尝试从缓存获取 (加锁读取，保证读取到的是完整的一组数据)
         synchronized (cacheLock) {
-            if (Objects.equals(keyword, prevKeyword) && prevTrack != null) {
+            if (Objects.equals(keyword, prevKeyword) && prevSong != null) {
                 log.info("命中歌曲缓存：" + keyword);
-                return prevTrack;
+                return prevSong;
             }
         }
 
@@ -161,15 +165,17 @@ public class KuGouMusicService {
                 .inLibrary(false)
                 .build();
 
+        KuGouSong song = new KuGouSong(track, bestMatchSong.getString("FileHash"));
+
         log.info("获取成功");
 
         // 更新缓存 (加锁写入)
         synchronized (cacheLock) {
             this.prevKeyword = keyword;
-            this.prevTrack = track;
+            this.prevSong = song;
         }
 
-        return track;
+        return song;
     }
 
 }
