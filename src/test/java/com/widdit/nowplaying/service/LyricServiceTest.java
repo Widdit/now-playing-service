@@ -12,11 +12,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -158,6 +161,75 @@ class LyricServiceTest {
         Lyric qq = lyric("qq", title + " (翻译) (译名) (别名)", author,
                 Integer.MIN_VALUE, true, true, true);
         Lyric kugou = lyric("kugou", "Different Song", "Other", 0, true, true, true);
+        stubAll(context, netease, qq, kugou);
+        int similarityDiff = SongMatchingUtil.calculateSimilarity(title, author, title, author)
+                - SongMatchingUtil.calculateSimilarity(title, author, qq.getTitle(), qq.getAuthor());
+
+        assertTrue(similarityDiff >= 3 && similarityDiff <= 8,
+                "fixture must exercise the duration-based closeness rule");
+        assertSame(netease, context.service.getLyric());
+    }
+
+    @Test
+    void autoModeTimesOutBlockedProviderAndReturnsAnotherUsefulResult() throws Exception {
+        TestContext context = autoContext("红豆 - 王菲", "qq");
+        ReflectionTestUtils.setField(context.service, "lyricFetchTimeoutMillis", 100L);
+        CountDownLatch releaseBlockedProvider = new CountDownLatch(1);
+        Lyric qq = lyric("qq", "红豆", "王菲", 240, true, true, false);
+        Lyric kugou = lyric("kugou", "红豆", "王菲", 240, true, false, false);
+        when(context.netease.getLyric(context.windowTitle)).thenAnswer(invocation -> {
+            releaseBlockedProvider.await();
+            return lyric("netease", "红豆", "王菲", 240, true, true, true);
+        });
+        when(context.qq.getLyric(context.windowTitle)).thenReturn(qq);
+        when(context.kugou.getLyric(context.windowTitle)).thenReturn(kugou);
+
+        try {
+            Lyric result = assertTimeoutPreemptively(Duration.ofSeconds(2), context.service::getLyric);
+            assertSame(qq, result);
+            verify(context.netease).getLyric(context.windowTitle);
+            verify(context.qq).getLyric(context.windowTitle);
+            verify(context.kugou).getLyric(context.windowTitle);
+        } finally {
+            releaseBlockedProvider.countDown();
+        }
+    }
+
+    @Test
+    void contentEmptyExactMatchCannotBeatUsefulLyrics() throws Exception {
+        TestContext context = autoContext("Counting Stars - OneRepublic", "kugou");
+        Lyric netease = lyric("netease", "Counting Stars (翻译)", "OneRepublic", 240, true, false, false);
+        Lyric qq = lyric("qq", "Different Song", "Other", 240, true, true, true);
+        Lyric kugou = lyric("kugou", "Counting Stars", "OneRepublic", 240, false, false, false);
+        stubAll(context, netease, qq, kugou);
+
+        assertSame(netease, context.service.getLyric());
+    }
+
+    @Test
+    void allContentEmptyCandidatesReturnNormalizedParsedEmptyLyric() throws Exception {
+        TestContext context = autoContext("红豆 - 王菲", "unknown");
+        stubAll(context,
+                lyric("netease", "Wrong", "Wrong", 240, false, false, false),
+                lyric("qq", "红豆", "王菲", 240, false, false, false),
+                lyric("kugou", "红豆", "王菲", 240, false, false, false));
+
+        Lyric result = context.service.getLyric();
+
+        assertEquals("netease", result.getSource());
+        assertEquals("红豆", result.getTitle());
+        assertEquals("王菲", result.getAuthor());
+        assertFalse(result.getHasLyric());
+    }
+
+    @Test
+    void invalidDurationDoesNotMakeLowerSimilarityCandidateClose() throws Exception {
+        String title = "Counting Stars";
+        String author = "OneRepublic";
+        TestContext context = autoContext(title + " - " + author, "qq");
+        Lyric netease = lyric("netease", title, author, 0, true, false, false);
+        Lyric qq = lyric("qq", title + " (翻译) (译名) (别名)", author, null, true, true, true);
+        Lyric kugou = lyric("kugou", "Different Song", "Other", 240, true, true, true);
         stubAll(context, netease, qq, kugou);
         int similarityDiff = SongMatchingUtil.calculateSimilarity(title, author, title, author)
                 - SongMatchingUtil.calculateSimilarity(title, author, qq.getTitle(), qq.getAuthor());

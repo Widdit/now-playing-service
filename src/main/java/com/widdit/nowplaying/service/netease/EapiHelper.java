@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import com.google.gson.Gson;
 import org.apache.http.HttpEntity;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.CloseableHttpClient;
@@ -26,6 +27,7 @@ import java.util.*;
  * 修改者：Widdit
  */
 public class EapiHelper {
+    private static final int HTTP_TIMEOUT_MILLIS = 10_000;
     private static final String userAgent = "Mozilla/5.0 (Linux; Android 9; PCT-AL10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.64 HuaweiBrowser/10.0.3.311 Mobile Safari/537.36";
     private static final byte[] eapiKey = "e82ckenh8dichen8".getBytes(StandardCharsets.US_ASCII);
     private static final Gson gson = new Gson();
@@ -67,7 +69,14 @@ public class EapiHelper {
         Map<String, String> encryptedData = eApi(url, data);
         url = url.replaceAll("\\w*api", "eapi");
 
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectionRequestTimeout(HTTP_TIMEOUT_MILLIS)
+                .setConnectTimeout(HTTP_TIMEOUT_MILLIS)
+                .setSocketTimeout(HTTP_TIMEOUT_MILLIS)
+                .build();
+        try (CloseableHttpClient httpClient = HttpClients.custom()
+                .setDefaultRequestConfig(requestConfig)
+                .build()) {
             HttpPost httpPost = new HttpPost(url);
 
             // 设置请求头

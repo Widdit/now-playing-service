@@ -29,7 +29,12 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Service
@@ -77,6 +82,19 @@ public class LyricService {
     // 播放器页面的配置文件 ID
     private static final List<String> PLAYER_PAGE_CONFIG_IDS = List.of("player", "playerMobile", "playerWidget");
     private static final List<String> LYRIC_SOURCE_ORDER = List.of("netease", "qq", "kugou");
+    private static final AtomicInteger LYRIC_FETCH_THREAD_NUMBER = new AtomicInteger();
+    private static final ThreadPoolExecutor LYRIC_FETCH_EXECUTOR = new ThreadPoolExecutor(
+            3, 3, 0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(12),
+            runnable -> {
+                Thread thread = new Thread(runnable,
+                        "lyric-provider-" + LYRIC_FETCH_THREAD_NUMBER.incrementAndGet());
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
+
+    long lyricFetchTimeoutMillis = 10_000L;
 
     // 存储所有配置的 Map，key 为配置文件 ID，value 为对应的 SettingsLyric 对象
     private Map<String, SettingsLyric> settingsMap;
@@ -333,14 +351,20 @@ public class LyricService {
         String preferredSource = normalizeLyricSource(source);
         Map<String, CompletableFuture<Lyric>> futures = new LinkedHashMap<>();
         for (String candidateSource : LYRIC_SOURCE_ORDER) {
-            futures.put(candidateSource, CompletableFuture.supplyAsync(() -> {
-                try {
-                    return fetchFromSourceWithoutFallback(candidateSource, windowTitle);
-                } catch (Exception e) {
-                    log.error("获取 " + candidateSource + " 歌词失败：" + e.getMessage());
-                    return null;
-                }
-            }));
+            try {
+                futures.put(candidateSource, CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return fetchFromSourceWithoutFallback(candidateSource, windowTitle);
+                    } catch (Exception e) {
+                        log.warn("获取 {} 歌词失败（{}）", candidateSource, e.getClass().getSimpleName());
+                        return null;
+                    }
+                }, LYRIC_FETCH_EXECUTOR).completeOnTimeout(
+                        null, lyricFetchTimeoutMillis, TimeUnit.MILLISECONDS));
+            } catch (RejectedExecutionException e) {
+                log.warn("获取 {} 歌词失败（{}）", candidateSource, e.getClass().getSimpleName());
+                futures.put(candidateSource, CompletableFuture.completedFuture(null));
+            }
         }
         CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0])).join();
 
@@ -354,6 +378,11 @@ public class LyricService {
         if (candidates.isEmpty()) {
             return createEmptyLyric(windowTitle, preferredSource);
         }
+        boolean hasUsableCandidate = candidates.values().stream().anyMatch(this::hasUsableContent);
+        if (!hasUsableCandidate) {
+            return createEmptyLyric(windowTitle, preferredSource);
+        }
+        candidates.entrySet().removeIf(entry -> !hasUsableContent(entry.getValue()));
 
         String[] parseResult = SongUtil.parseWindowTitle(windowTitle);
         String realTitle = parseResult[0];
@@ -376,8 +405,10 @@ public class LyricService {
         List<String> closeSources = new ArrayList<>();
         for (String candidateSource : candidates.keySet()) {
             int similarityDiff = highestSimilarity - similarities.get(candidateSource);
-            long durationDiff = Math.abs(safeDuration(highestCandidate) - safeDuration(candidates.get(candidateSource)));
-            if (similarityDiff <= 2 || (durationDiff <= 2 && similarityDiff <= 8)) {
+            Lyric candidate = candidates.get(candidateSource);
+            boolean durationClose = hasValidDuration(highestCandidate) && hasValidDuration(candidate)
+                    && Math.abs(safeDuration(highestCandidate) - safeDuration(candidate)) <= 2;
+            if (similarityDiff <= 2 || (durationClose && similarityDiff <= 8)) {
                 closeSources.add(candidateSource);
             }
         }
@@ -418,6 +449,16 @@ public class LyricService {
 
     private long safeDuration(Lyric lyric) {
         return lyric.getDuration() == null ? 0L : lyric.getDuration().longValue();
+    }
+
+    private boolean hasValidDuration(Lyric lyric) {
+        return lyric.getDuration() != null && lyric.getDuration() > 0;
+    }
+
+    private boolean hasUsableContent(Lyric lyric) {
+        return Boolean.TRUE.equals(lyric.getHasLyric())
+                || Boolean.TRUE.equals(lyric.getHasTranslatedLyric())
+                || Boolean.TRUE.equals(lyric.getHasKaraokeLyric());
     }
 
     private String normalizeLyricSource(String source) {

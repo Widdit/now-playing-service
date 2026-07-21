@@ -27,6 +27,7 @@ import java.util.Objects;
 @Service
 @Slf4j
 public class NeteaseMusicService {
+    private static final int LOCAL_HTTP_TIMEOUT_MILLIS = 10_000;
 
     @Autowired
     private QQMusicService qqMusicService;
@@ -247,6 +248,8 @@ public class NeteaseMusicService {
                 // 发送 GET 请求
                 URL url = new URL("http://localhost:9863/api/query/track");
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setConnectTimeout(LOCAL_HTTP_TIMEOUT_MILLIS);
+                connection.setReadTimeout(LOCAL_HTTP_TIMEOUT_MILLIS);
                 connection.setRequestMethod("GET");
 
                 // 读取响应
