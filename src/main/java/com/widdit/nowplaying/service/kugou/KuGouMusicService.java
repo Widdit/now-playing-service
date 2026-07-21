@@ -3,6 +3,7 @@ package com.widdit.nowplaying.service.kugou;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.widdit.nowplaying.entity.Lyric;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
@@ -13,11 +14,16 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
 public class KuGouMusicService {
+
+    private static final Pattern LRC_TIME_TAG = Pattern.compile(
+            "(?m)^\\[\\d{2}:\\d{2}(?:\\.\\d{2})?]");
 
     private final KuGouHttpClient httpClient;
 
@@ -39,6 +45,124 @@ public class KuGouMusicService {
      */
     public Track search(String keyword) throws IOException {
         return searchSong(keyword).getTrack();
+    }
+
+    public Lyric getLyric(String keyword) throws IOException {
+        String[] parsed = SongUtil.parseWindowTitle(keyword);
+        String realTitle = parsed[0];
+        String realAuthor = parsed[1];
+        KuGouSong song = searchSong(keyword);
+        Track track = song.getTrack();
+
+        Lyric lyric = new Lyric();
+        lyric.setSource("kugou");
+        lyric.setTitle(track.getTitle());
+        lyric.setAuthor(track.getAuthor());
+        lyric.setDuration(track.getDuration());
+
+        int matchThreshold = getMatchThreshold(realAuthor);
+        int trackSimilarity = SongMatchingUtil.calculateSimilarity(
+                realTitle, realAuthor, track.getTitle(), track.getAuthor());
+        if (trackSimilarity < matchThreshold) {
+            lyric.setTitle(realTitle);
+            lyric.setAuthor(realAuthor);
+            return lyric;
+        }
+
+        JSONObject candidate = findBestLyricCandidate(
+                keyword, song, realTitle, realAuthor, matchThreshold);
+        if (candidate == null) {
+            return lyric;
+        }
+
+        String downloadUrl = UriComponentsBuilder
+                .fromHttpUrl("https://lyrics.kugou.com/download")
+                .queryParam("ver", 1)
+                .queryParam("client", "pc")
+                .queryParam("id", candidate.getString("id"))
+                .queryParam("accesskey", candidate.getString("accesskey"))
+                .queryParam("fmt", "lrc")
+                .queryParam("charset", "utf8")
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
+        JSONObject download = JSON.parseObject(httpClient.get(downloadUrl));
+        if (download == null || download.getIntValue("status") != 200) {
+            return lyric;
+        }
+        String content = download.getString("content");
+        if (content == null || content.isBlank()) {
+            return lyric;
+        }
+
+        String lrc;
+        try {
+            lrc = new String(Base64.getDecoder().decode(content), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException exception) {
+            return lyric;
+        }
+        if (!LRC_TIME_TAG.matcher(lrc).find()) {
+            return lyric;
+        }
+
+        lyric.setHasLyric(true);
+        lyric.setLrc(lrc);
+        return lyric;
+    }
+
+    private JSONObject findBestLyricCandidate(
+            String keyword,
+            KuGouSong song,
+            String realTitle,
+            String realAuthor,
+            int matchThreshold) throws IOException {
+        Track track = song.getTrack();
+        String url = UriComponentsBuilder
+                .fromHttpUrl("https://lyrics.kugou.com/search")
+                .queryParam("ver", 1)
+                .queryParam("man", "yes")
+                .queryParam("client", "pc")
+                .queryParam("keyword", keyword)
+                .queryParam("duration", track.getDuration() * 1000)
+                .queryParam("hash", song.getFileHash())
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
+        JSONObject response = JSON.parseObject(httpClient.get(url));
+        if (response == null || response.getIntValue("status") != 200) {
+            return null;
+        }
+        JSONArray candidates = response.getJSONArray("candidates");
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+
+        JSONObject bestCandidate = null;
+        int bestSimilarity = Integer.MIN_VALUE;
+        int bestDurationDifference = Integer.MAX_VALUE;
+        for (int index = 0; index < candidates.size(); index++) {
+            JSONObject candidate = candidates.getJSONObject(index);
+            int similarity = SongMatchingUtil.calculateSimilarity(
+                    realTitle,
+                    realAuthor,
+                    candidate.getString("song"),
+                    candidate.getString("singer"));
+            int durationDifference = Math.abs(
+                    candidate.getIntValue("duration") - track.getDuration() * 1000);
+            if (similarity > bestSimilarity
+                    || similarity == bestSimilarity && durationDifference < bestDurationDifference) {
+                bestCandidate = candidate;
+                bestSimilarity = similarity;
+                bestDurationDifference = durationDifference;
+            }
+        }
+        return bestSimilarity >= matchThreshold ? bestCandidate : null;
+    }
+
+    private int getMatchThreshold(String realAuthor) {
+        return realAuthor == null || realAuthor.isBlank()
+                ? 75
+                : SongMatchingUtil.EXACT_MATCH_THRESHOLD;
     }
 
     KuGouSong searchSong(String keyword) throws IOException {
