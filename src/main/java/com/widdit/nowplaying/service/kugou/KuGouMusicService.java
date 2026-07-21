@@ -8,13 +8,10 @@ import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
 import com.widdit.nowplaying.util.TimeUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Connection;
-import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
@@ -22,12 +19,18 @@ import java.util.Objects;
 @Slf4j
 public class KuGouMusicService {
 
+    private final KuGouHttpClient httpClient;
+
     // 缓存相关变量
     private String prevKeyword;
     private Track prevTrack;
 
     // 锁对象
     private final Object cacheLock = new Object();
+
+    public KuGouMusicService(KuGouHttpClient httpClient) {
+        this.httpClient = httpClient;
+    }
 
     /**
      * 根据关键词搜索歌曲，返回歌曲信息对象
@@ -58,7 +61,7 @@ public class KuGouMusicService {
                 .toUriString();
 
         // 发送搜索歌曲请求
-        String respStr = sendGetRequest(url);
+        String respStr = httpClient.get(url);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
@@ -167,34 +170,6 @@ public class KuGouMusicService {
         }
 
         return track;
-    }
-
-    /**
-     * 发送 GET 请求
-     * @param url 请求 URL
-     * @return 响应 JSON 字符串
-     * @throws IOException
-     */
-    private String sendGetRequest(String url) throws IOException {
-        URL parsedUrl = new URL(url);
-        String host = parsedUrl.getHost();
-
-        Connection.Response response = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12; rv:57.0) Gecko/20100101 Firefox/57.0")
-                .header("Accept", "*/*")
-                .header("Cache-Control", "no-cache")
-                .header("Connection", "keep-alive")
-                .header("Host", host)
-                .header("Accept-Language", "zh-CN,en-US;q=0.7,en;q=0.3")
-                .header("DNT", "1")
-                .header("Pragma", "no-cache")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .method(Connection.Method.GET)
-                .ignoreContentType(true)
-                .timeout(10000)
-                .execute();
-
-        return response.body();
     }
 
 }
