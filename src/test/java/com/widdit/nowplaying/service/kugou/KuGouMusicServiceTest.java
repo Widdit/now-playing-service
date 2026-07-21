@@ -2,6 +2,7 @@ package com.widdit.nowplaying.service.kugou;
 
 import com.widdit.nowplaying.entity.Lyric;
 import com.widdit.nowplaying.entity.Track;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -42,6 +43,17 @@ class KuGouMusicServiceTest {
             + "\"content\":\""
             + Base64.getEncoder().encodeToString(LRC.getBytes(StandardCharsets.UTF_8))
             + "\"}";
+
+    @Test
+    void realApiReturnsTimedLrc() throws Exception {
+        Assumptions.assumeTrue(Boolean.getBoolean("kugou.integration"));
+        Lyric lyric = new KuGouMusicService(new KuGouHttpClient())
+                .getLyric("晴天 - 周杰伦");
+        assertEquals("kugou", lyric.getSource());
+        assertTrue(lyric.getHasLyric());
+        assertTrue(lyric.getLrc().matches(
+                "(?s).*\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,3})?].*"));
+    }
 
     @Test
     void searchSelectsStudioTrackInsteadOfFirstLiveResult() throws IOException {
