@@ -24,7 +24,9 @@ import javax.annotation.PostConstruct;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -74,6 +76,7 @@ public class LyricService {
     private static final List<String> LYRIC_PAGE_CONFIG_IDS = List.of("main", "profileA", "profileB", "profileC", "profileD");
     // 播放器页面的配置文件 ID
     private static final List<String> PLAYER_PAGE_CONFIG_IDS = List.of("player", "playerMobile", "playerWidget");
+    private static final List<String> LYRIC_SOURCE_ORDER = List.of("netease", "qq", "kugou");
 
     // 存储所有配置的 Map，key 为配置文件 ID，value 为对应的 SettingsLyric 对象
     private Map<String, SettingsLyric> settingsMap;
@@ -208,6 +211,18 @@ public class LyricService {
         }
     }
 
+    private Lyric fetchFromSourceWithoutFallback(String source, String windowTitle) throws Exception {
+        switch (source) {
+            case "qq":
+                return qqMusicService.getLyric(windowTitle);
+            case "kugou":
+                return kuGouMusicService.getLyric(windowTitle);
+            case "netease":
+            default:
+                return neteaseMusicService.getLyric(windowTitle);
+        }
+    }
+
     /**
      * 监听歌曲发生改变的事件
      * @param event
@@ -314,130 +329,99 @@ public class LyricService {
      * @return 最佳歌词对象
      */
     private Lyric selectBestLyric(String source, String windowTitle) {
-        log.info("并行获取两个音乐平台的歌词..");
+        log.info("并行获取三个音乐平台的歌词..");
+        String preferredSource = normalizeLyricSource(source);
+        Map<String, CompletableFuture<Lyric>> futures = new LinkedHashMap<>();
+        for (String candidateSource : LYRIC_SOURCE_ORDER) {
+            futures.put(candidateSource, CompletableFuture.supplyAsync(() -> {
+                try {
+                    return fetchFromSourceWithoutFallback(candidateSource, windowTitle);
+                } catch (Exception e) {
+                    log.error("获取 " + candidateSource + " 歌词失败：" + e.getMessage());
+                    return null;
+                }
+            }));
+        }
+        CompletableFuture.allOf(futures.values().toArray(new CompletableFuture[0])).join();
 
-        // 如果是周杰伦的歌，直接返回 QQ 音乐歌词
-        if (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫")) {
-            try {
-                return qqMusicService.getLyric(windowTitle);
-            } catch (Exception e) {
-                log.error("获取 QQ 音乐歌词失败：" + e.getMessage());
-                return createEmptyLyric(windowTitle, "qq");
+        Map<String, Lyric> candidates = new LinkedHashMap<>();
+        for (String candidateSource : LYRIC_SOURCE_ORDER) {
+            Lyric candidate = futures.get(candidateSource).join();
+            if (candidate != null) {
+                candidates.put(candidateSource, candidate);
             }
         }
-
-        // 并行获取两个音乐平台的歌词
-        CompletableFuture<Lyric> neteaseFuture = CompletableFuture.supplyAsync(() -> {
-            try {
-                return neteaseMusicService.getLyric(windowTitle);
-            } catch (Exception e) {
-                log.error("获取网易云音乐歌词失败：" + e.getMessage());
-                return null;
-            }
-        });
-
-        CompletableFuture<Lyric> qqFuture = CompletableFuture.supplyAsync(() -> {
-            try {
-                return qqMusicService.getLyric(windowTitle);
-            } catch (Exception e) {
-                log.error("获取 QQ 音乐歌词失败：" + e.getMessage());
-                return null;
-            }
-        });
-
-        Lyric neteaseLyric = null;
-        Lyric qqLyric = null;
-
-        try {
-            // 等待两个请求都完成
-            CompletableFuture.allOf(neteaseFuture, qqFuture).join();
-            neteaseLyric = neteaseFuture.get();
-            qqLyric = qqFuture.get();
-        } catch (Exception e) {
-            log.error("并行获取歌词结果失败：" + e.getMessage());
-        }
-
-        // 如果两个平台都返回 null，返回空 Lyric 对象
-        if (neteaseLyric == null && qqLyric == null) {
-            log.error("两个平台都获取失败");
-            return createEmptyLyric(windowTitle, source);
-        }
-
-        // 如果只有一个平台成功，返回成功的那个
-        if (neteaseLyric == null) {
-            log.error("网易云音乐获取失败，使用 QQ 音乐歌词");
-            return qqLyric;
-        }
-        if (qqLyric == null) {
-            log.error("QQ 音乐获取失败，使用网易云音乐歌词");
-            return neteaseLyric;
+        if (candidates.isEmpty()) {
+            return createEmptyLyric(windowTitle, preferredSource);
         }
 
         String[] parseResult = SongUtil.parseWindowTitle(windowTitle);
         String realTitle = parseResult[0];
         String realAuthor = parseResult[1];
-
-        // 计算歌曲标题相似度
-        int neteaseSimilarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, neteaseLyric.getTitle(), neteaseLyric.getAuthor());
-        int qqSimilarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, qqLyric.getTitle(), qqLyric.getAuthor());
-
-        // System.out.println("网易云音乐：" + neteaseLyric.getTitle() + " - " + neteaseLyric.getAuthor());
-        // System.out.println("网易云音乐相似度：" + neteaseSimilarity);
-        // System.out.println("QQ 音乐：" + qqLyric.getTitle() + " - " + qqLyric.getAuthor());
-        // System.out.println("QQ 音乐相似度：" + qqSimilarity);
-
-        int similarityDiff = Math.abs(neteaseSimilarity - qqSimilarity);
-        int durationDiff = Math.abs(neteaseLyric.getDuration() - qqLyric.getDuration());
-
-        // 相似度接近，说明歌曲信息都匹配，则根据得分选择最佳歌词
-        if (similarityDiff <= 2 || (durationDiff <= 2 && similarityDiff <= 8)) {
-            return selectByScore(neteaseLyric, qqLyric, source);
-        }
-
-        // 相似度不接近，则选择歌曲相似度更高的歌词
-        if (neteaseSimilarity > qqSimilarity) {
-            return neteaseLyric;
-        } else {
-            return qqLyric;
-        }
-    }
-
-    /**
-     * 根据得分选择最佳歌词（评判标准：原版歌词、翻译歌词、逐字歌词是否齐全，越齐全得分越高）
-     * @param neteaseLyric 网易云音乐歌词对象
-     * @param qqLyric QQ 音乐歌词对象
-     * @param source 歌词来源
-     * @return 最佳歌词对象
-     */
-    private Lyric selectByScore(Lyric neteaseLyric, Lyric qqLyric, String source) {
-        int neteaseScore = 0;
-        int qqScore = 0;
-
-        if (neteaseLyric.getHasLyric()) neteaseScore++;
-        if (qqLyric.getHasLyric()) qqScore++;
-
-        if (neteaseLyric.getHasTranslatedLyric()) neteaseScore++;
-        if (qqLyric.getHasTranslatedLyric()) qqScore++;
-
-        if (neteaseLyric.getHasKaraokeLyric()) neteaseScore++;
-        if (qqLyric.getHasKaraokeLyric()) qqScore++;
-
-        // System.out.println("网易云音乐得分：" + neteaseScore);
-        // System.out.println("QQ 音乐得分：" + qqScore);
-
-        // 返回 score 更高的歌词对象
-        if (neteaseScore > qqScore) {
-            return neteaseLyric;
-        } else if (qqScore > neteaseScore) {
-            return qqLyric;
-        } else {
-            // 如果 score 相同，则返回用户所选平台的歌词对象
-            if ("qq".equals(source)) {
-                return qqLyric;
-            } else {
-                return neteaseLyric;
+        Map<String, Integer> similarities = new LinkedHashMap<>();
+        String highestSource = null;
+        int highestSimilarity = Integer.MIN_VALUE;
+        for (Map.Entry<String, Lyric> entry : candidates.entrySet()) {
+            Lyric candidate = entry.getValue();
+            int similarity = SongMatchingUtil.calculateSimilarity(
+                    realTitle, realAuthor, candidate.getTitle(), candidate.getAuthor());
+            similarities.put(entry.getKey(), similarity);
+            if (similarity > highestSimilarity) {
+                highestSimilarity = similarity;
+                highestSource = entry.getKey();
             }
         }
+
+        Lyric highestCandidate = candidates.get(highestSource);
+        List<String> closeSources = new ArrayList<>();
+        for (String candidateSource : candidates.keySet()) {
+            int similarityDiff = highestSimilarity - similarities.get(candidateSource);
+            long durationDiff = Math.abs(safeDuration(highestCandidate) - safeDuration(candidates.get(candidateSource)));
+            if (similarityDiff <= 2 || (durationDiff <= 2 && similarityDiff <= 8)) {
+                closeSources.add(candidateSource);
+            }
+        }
+        if (closeSources.size() == 1) {
+            return candidates.get(closeSources.get(0));
+        }
+
+        int topScore = -1;
+        List<String> topSources = new ArrayList<>();
+        for (String candidateSource : closeSources) {
+            int score = completenessScore(candidates.get(candidateSource));
+            if (score > topScore) {
+                topScore = score;
+                topSources.clear();
+                topSources.add(candidateSource);
+            } else if (score == topScore) {
+                topSources.add(candidateSource);
+            }
+        }
+        if (topSources.contains(preferredSource)) {
+            return candidates.get(preferredSource);
+        }
+        for (String candidateSource : LYRIC_SOURCE_ORDER) {
+            if (topSources.contains(candidateSource)) {
+                return candidates.get(candidateSource);
+            }
+        }
+        return highestCandidate;
+    }
+
+    private int completenessScore(Lyric lyric) {
+        int score = 0;
+        if (Boolean.TRUE.equals(lyric.getHasLyric())) score++;
+        if (Boolean.TRUE.equals(lyric.getHasTranslatedLyric())) score++;
+        if (Boolean.TRUE.equals(lyric.getHasKaraokeLyric())) score++;
+        return score;
+    }
+
+    private long safeDuration(Lyric lyric) {
+        return lyric.getDuration() == null ? 0L : lyric.getDuration().longValue();
+    }
+
+    private String normalizeLyricSource(String source) {
+        return source != null && LYRIC_SOURCE_ORDER.contains(source) ? source : "netease";
     }
 
     /**
