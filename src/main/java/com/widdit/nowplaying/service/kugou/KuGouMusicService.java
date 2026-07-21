@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
@@ -54,11 +55,28 @@ public class KuGouMusicService {
         String[] parsed = SongUtil.parseWindowTitle(keyword);
         String realTitle = parsed[0];
         String realAuthor = parsed[1];
-        KuGouSong song = searchSong(keyword);
-        Track track = song.getTrack();
 
         Lyric lyric = new Lyric();
         lyric.setSource("kugou");
+        lyric.setTitle(realTitle);
+        lyric.setAuthor(realAuthor);
+
+        try {
+            return retrieveLyric(keyword, realTitle, realAuthor, lyric);
+        } catch (IOException | RuntimeException exception) {
+            log.warn("Kugou lyric retrieval failed: {}", exception.getClass().getSimpleName());
+            return lyric;
+        }
+    }
+
+    private Lyric retrieveLyric(
+            String keyword,
+            String realTitle,
+            String realAuthor,
+            Lyric lyric) throws IOException {
+        KuGouSong song = searchSong(keyword);
+        Track track = song.getTrack();
+
         lyric.setTitle(track.getTitle());
         lyric.setAuthor(track.getAuthor());
         lyric.setDuration(track.getDuration());
@@ -90,11 +108,18 @@ public class KuGouMusicService {
                 .encode(StandardCharsets.UTF_8)
                 .toUriString();
         JSONObject download = JSON.parseObject(httpClient.get(downloadUrl));
-        if (download == null || download.getIntValue("status") != 200) {
+        if (download == null) {
+            log.warn("Kugou lyric download returned no response");
+            return lyric;
+        }
+        int downloadStatus = download.getIntValue("status");
+        if (downloadStatus != 200) {
+            log.warn("Kugou lyric download returned status {}", downloadStatus);
             return lyric;
         }
         String content = download.getString("content");
         if (content == null || content.isBlank()) {
+            log.debug("Kugou lyric download returned blank content");
             return lyric;
         }
 
@@ -102,6 +127,7 @@ public class KuGouMusicService {
         try {
             decodedContent = Base64.getDecoder().decode(content);
         } catch (IllegalArgumentException exception) {
+            log.debug("Kugou lyric download content is not valid Base64");
             return lyric;
         }
 
@@ -113,9 +139,11 @@ public class KuGouMusicService {
                     .decode(ByteBuffer.wrap(decodedContent))
                     .toString();
         } catch (CharacterCodingException exception) {
+            log.debug("Kugou lyric download content is not valid UTF-8");
             return lyric;
         }
         if (!LRC_TIME_TAG.matcher(lrc).find()) {
+            log.debug("Kugou lyric download content has no timed LRC tag");
             return lyric;
         }
 
@@ -137,32 +165,54 @@ public class KuGouMusicService {
                 .queryParam("man", "yes")
                 .queryParam("client", "pc")
                 .queryParam("keyword", keyword)
-                .queryParam("duration", track.getDuration() * 1000)
+                .queryParam("duration", track.getDuration().longValue() * 1000L)
                 .queryParam("hash", song.getFileHash())
                 .build()
                 .encode(StandardCharsets.UTF_8)
                 .toUriString();
         JSONObject response = JSON.parseObject(httpClient.get(url));
-        if (response == null || response.getIntValue("status") != 200) {
+        if (response == null) {
+            log.warn("Kugou lyric search returned no response");
             return null;
         }
-        JSONArray candidates = response.getJSONArray("candidates");
-        if (candidates == null || candidates.isEmpty()) {
+        int searchStatus = response.getIntValue("status");
+        if (searchStatus != 200) {
+            log.warn("Kugou lyric search returned status {}", searchStatus);
+            return null;
+        }
+        Object candidateValue = response.get("candidates");
+        if (!(candidateValue instanceof JSONArray)) {
+            log.debug("Kugou lyric search returned missing or invalid candidates");
+            return null;
+        }
+        JSONArray candidates = (JSONArray) candidateValue;
+        if (candidates.isEmpty()) {
+            log.debug("Kugou lyric search returned no candidates");
             return null;
         }
 
         JSONObject bestCandidate = null;
         int bestSimilarity = Integer.MIN_VALUE;
-        int bestDurationDifference = Integer.MAX_VALUE;
+        long bestDurationDifference = Long.MAX_VALUE;
+        long expectedDurationMillis = track.getDuration().longValue() * 1000L;
         for (int index = 0; index < candidates.size(); index++) {
-            JSONObject candidate = candidates.getJSONObject(index);
+            Object value = candidates.get(index);
+            if (!(value instanceof JSONObject)) {
+                log.debug("Skipping invalid Kugou lyric candidate at index {}: not an object", index);
+                continue;
+            }
+            JSONObject candidate = (JSONObject) value;
+            Long candidateDuration = validateCandidate(candidate, realAuthor, index);
+            if (candidateDuration == null) {
+                continue;
+            }
             int similarity = SongMatchingUtil.calculateSimilarity(
                     realTitle,
                     realAuthor,
                     candidate.getString("song"),
                     candidate.getString("singer"));
-            int durationDifference = Math.abs(
-                    candidate.getIntValue("duration") - track.getDuration() * 1000);
+            long durationDifference = getDurationDifference(
+                    candidateDuration, expectedDurationMillis);
             if (similarity > bestSimilarity
                     || similarity == bestSimilarity && durationDifference < bestDurationDifference) {
                 bestCandidate = candidate;
@@ -170,7 +220,59 @@ public class KuGouMusicService {
                 bestDurationDifference = durationDifference;
             }
         }
+        if (bestCandidate == null) {
+            log.debug("Kugou lyric search returned no valid candidates");
+            return null;
+        }
         return bestSimilarity >= matchThreshold ? bestCandidate : null;
+    }
+
+    private Long validateCandidate(JSONObject candidate, String realAuthor, int index) {
+        if (isBlank(candidate.getString("song"))) {
+            log.debug("Skipping invalid Kugou lyric candidate at index {}: missing song", index);
+            return null;
+        }
+        if (isBlank(candidate.getString("id"))) {
+            log.debug("Skipping invalid Kugou lyric candidate at index {}: missing id", index);
+            return null;
+        }
+        if (isBlank(candidate.getString("accesskey"))) {
+            log.debug("Skipping invalid Kugou lyric candidate at index {}: missing access key", index);
+            return null;
+        }
+        if (!isBlank(realAuthor) && isBlank(candidate.getString("singer"))) {
+            log.debug("Skipping invalid Kugou lyric candidate at index {}: missing singer", index);
+            return null;
+        }
+
+        Object durationValue = candidate.get("duration");
+        if (!(durationValue instanceof Number)) {
+            log.debug("Skipping invalid Kugou lyric candidate at index {}: invalid duration", index);
+            return null;
+        }
+        try {
+            long duration = new BigDecimal(durationValue.toString()).longValueExact();
+            if (duration < 0) {
+                log.debug("Skipping invalid Kugou lyric candidate at index {}: invalid duration", index);
+                return null;
+            }
+            return duration;
+        } catch (ArithmeticException | NumberFormatException exception) {
+            log.debug("Skipping invalid Kugou lyric candidate at index {}: invalid duration", index);
+            return null;
+        }
+    }
+
+    private long getDurationDifference(long candidateDuration, long expectedDuration) {
+        try {
+            return Math.abs(Math.subtractExact(candidateDuration, expectedDuration));
+        } catch (ArithmeticException exception) {
+            return Long.MAX_VALUE;
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private int getMatchThreshold(String realAuthor) {

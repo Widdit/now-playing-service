@@ -12,7 +12,6 @@ import java.util.Base64;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
@@ -143,6 +142,33 @@ class KuGouMusicServiceTest {
     }
 
     @Test
+    void getLyricUsesLongDurationArithmeticForCandidateTieBreak() throws IOException {
+        String largeDurationCandidates = "{"
+                + "\"status\":200,"
+                + "\"candidates\":[{"
+                + "\"id\":\"overflow\","
+                + "\"accesskey\":\"OVERFLOW_KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":3000000000"
+                + "},{"
+                + "\"id\":\"closer\","
+                + "\"accesskey\":\"CLOSER_KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":2000000000"
+                + "}]}";
+        KuGouHttpClient client = lyricClientWithSearchResponse(largeDurationCandidates);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(LYRIC_DOWNLOAD_RESPONSE);
+
+        Lyric lyric = new KuGouMusicService(client).getLyric("晴天 - 周杰伦");
+
+        assertTrue(lyric.getHasLyric());
+        verify(client).get(contains("id=closer"));
+        verify(client, never()).get(contains("id=overflow"));
+    }
+
+    @Test
     void getLyricUsesLowerThresholdWhenAuthorIsMissing() throws IOException {
         String candidate = "{"
                 + "\"status\":200,"
@@ -215,6 +241,148 @@ class KuGouMusicServiceTest {
 
         assertEmptyKugouLyric(lyric);
         verify(client, never()).get(contains("lyrics.kugou.com/download"));
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenLyricSearchOmitsCandidates() throws IOException {
+        KuGouHttpClient client = lyricClientWithSearchResponse("{\"status\":200}");
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+        verify(client, never()).get(contains("lyrics.kugou.com/download"));
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenLyricSearchCandidatesHaveInvalidShape() throws IOException {
+        KuGouHttpClient client = lyricClientWithSearchResponse(
+                "{\"status\":200,\"candidates\":{}}");
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+        verify(client, never()).get(contains("lyrics.kugou.com/download"));
+    }
+
+    @Test
+    void getLyricSkipsNullCandidate() throws IOException {
+        assertRejectedCandidate("null");
+    }
+
+    @Test
+    void getLyricSkipsNonObjectCandidate() throws IOException {
+        assertRejectedCandidate("\"not-an-object\"");
+    }
+
+    @Test
+    void getLyricSkipsCandidateMissingSong() throws IOException {
+        assertRejectedCandidate("{"
+                + "\"id\":\"candidate\","
+                + "\"accesskey\":\"KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"duration\":269000"
+                + "}");
+    }
+
+    @Test
+    void getLyricSkipsCandidateMissingId() throws IOException {
+        assertRejectedCandidate("{"
+                + "\"accesskey\":\"KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":269000"
+                + "}");
+    }
+
+    @Test
+    void getLyricSkipsCandidateMissingAccessKey() throws IOException {
+        assertRejectedCandidate("{"
+                + "\"id\":\"candidate\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":269000"
+                + "}");
+    }
+
+    @Test
+    void getLyricSkipsCandidateMissingDuration() throws IOException {
+        assertRejectedCandidate("{"
+                + "\"id\":\"candidate\","
+                + "\"accesskey\":\"KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\""
+                + "}");
+    }
+
+    @Test
+    void getLyricSkipsCandidateWithNegativeDuration() throws IOException {
+        assertRejectedCandidate("{"
+                + "\"id\":\"candidate\","
+                + "\"accesskey\":\"KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":-1"
+                + "}");
+    }
+
+    @Test
+    void getLyricSkipsCandidateWithNonnumericDuration() throws IOException {
+        assertRejectedCandidate("{"
+                + "\"id\":\"candidate\","
+                + "\"accesskey\":\"KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":\"unknown\""
+                + "}");
+    }
+
+    @Test
+    void getLyricDoesNotPreferBlankSingerWhenAuthorIsKnown() throws IOException {
+        String candidates = "{"
+                + "\"status\":200,"
+                + "\"candidates\":[{"
+                + "\"id\":\"blank-singer\","
+                + "\"accesskey\":\"BLANK_KEY\","
+                + "\"singer\":\"\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":269000"
+                + "},{"
+                + "\"id\":\"right\","
+                + "\"accesskey\":\"RIGHT_ACCESS_KEY\","
+                + "\"singer\":\"周杰伦\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":269792"
+                + "}]}";
+        KuGouHttpClient client = lyricClientWithSearchResponse(candidates);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(LYRIC_DOWNLOAD_RESPONSE);
+
+        Lyric lyric = new KuGouMusicService(client).getLyric("晴天 - 周杰伦");
+
+        assertTrue(lyric.getHasLyric());
+        verify(client).get(contains("id=right"));
+        verify(client, never()).get(contains("id=blank-singer"));
+    }
+
+    @Test
+    void getLyricAllowsBlankSingerWhenLocalAuthorIsMissing() throws IOException {
+        String candidate = "{"
+                + "\"status\":200,"
+                + "\"candidates\":[{"
+                + "\"id\":\"blank-singer\","
+                + "\"accesskey\":\"BLANK_KEY\","
+                + "\"singer\":\"\","
+                + "\"song\":\"晴天\","
+                + "\"duration\":269000"
+                + "}]}";
+        KuGouHttpClient client = lyricClientWithSearchResponse(candidate);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(LYRIC_DOWNLOAD_RESPONSE);
+
+        Lyric lyric = new KuGouMusicService(client).getLyric("晴天");
+
+        assertTrue(lyric.getHasLyric());
+        verify(client).get(contains("id=blank-singer"));
     }
 
     @Test
@@ -335,14 +503,83 @@ class KuGouMusicServiceTest {
     }
 
     @Test
-    void getLyricPropagatesHttpClientIoException() throws IOException {
+    void getLyricReturnsEmptyWhenSongSearchThrowsIOException() throws IOException {
         KuGouHttpClient client = mock(KuGouHttpClient.class);
         when(client.get(contains("song_search_v2"))).thenThrow(new IOException("offline"));
 
-        IOException exception = assertThrows(IOException.class,
+        Lyric lyric = assertDoesNotThrow(
                 () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
 
-        assertEquals("offline", exception.getMessage());
+        assertEmptyKugouLyric(lyric);
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenLyricSearchThrowsIOException() throws IOException {
+        KuGouHttpClient client = mock(KuGouHttpClient.class);
+        when(client.get(contains("song_search_v2"))).thenReturn(searchResponse());
+        when(client.get(contains("lyrics.kugou.com/search"))).thenThrow(new IOException("offline"));
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenDownloadThrowsIOException() throws IOException {
+        KuGouHttpClient client = lyricClientWithSearchResponse(LYRIC_SEARCH_RESPONSE);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenThrow(new IOException("offline"));
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenResponseJsonIsMalformed() throws IOException {
+        KuGouHttpClient client = mock(KuGouHttpClient.class);
+        when(client.get(contains("song_search_v2"))).thenReturn("{");
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenSongSearchOmitsData() throws IOException {
+        KuGouHttpClient client = mock(KuGouHttpClient.class);
+        when(client.get(contains("song_search_v2"))).thenReturn("{\"error_code\":0}");
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenSongSearchOmitsLists() throws IOException {
+        KuGouHttpClient client = mock(KuGouHttpClient.class);
+        when(client.get(contains("song_search_v2")))
+                .thenReturn("{\"error_code\":0,\"data\":{}}");
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+    }
+
+    private static void assertRejectedCandidate(String candidateJson) throws IOException {
+        KuGouHttpClient client = lyricClientWithSearchResponse(
+                "{\"status\":200,\"candidates\":[" + candidateJson + "]}");
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(LYRIC_DOWNLOAD_RESPONSE);
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+        verify(client, never()).get(contains("lyrics.kugou.com/download"));
     }
 
     private static KuGouHttpClient lyricClientWithSearchResponse(String lyricSearchResponse)
