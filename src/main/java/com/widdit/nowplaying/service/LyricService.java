@@ -193,7 +193,8 @@ public class LyricService {
     }
 
     private Lyric fetchFromSource(String source, String windowTitle) throws Exception {
-        switch (source) {
+        String normalizedSource = source == null ? "netease" : source;
+        switch (normalizedSource) {
             case "qq":
                 return qqMusicService.getLyric(windowTitle);
             case "kugou":
