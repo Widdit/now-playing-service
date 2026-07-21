@@ -1075,7 +1075,7 @@ Expected: tests and build pass with no uncommitted source changes.
 Execute the dedicated integration test only when network is available:
 
 ```powershell
-mvn -Dtest=KuGouMusicServiceTest#realApiReturnsTimedLrc test -Dkugou.integration=true
+mvn '-Dtest=KuGouMusicServiceTest#realApiReturnsTimedLrc' test '-Dkugou.integration=true'
 ```
 
 Add this guarded method to `KuGouMusicServiceTest` and run it with a real client:
