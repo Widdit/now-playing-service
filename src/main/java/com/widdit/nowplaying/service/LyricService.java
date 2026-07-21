@@ -8,6 +8,7 @@ import com.widdit.nowplaying.entity.SettingsLyric;
 import com.widdit.nowplaying.entity.SettingsLyricCommon;
 import com.widdit.nowplaying.event.LyricChangedEvent;
 import com.widdit.nowplaying.event.TrackChangedEvent;
+import com.widdit.nowplaying.service.kugou.KuGouMusicService;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.service.wesing.WeSingService;
@@ -39,6 +40,8 @@ public class LyricService {
     private NeteaseMusicService neteaseMusicService;
     @Autowired
     private QQMusicService qqMusicService;
+    @Autowired
+    private KuGouMusicService kuGouMusicService;
     @Autowired
     private WeSingService weSingService;
     @Autowired
@@ -178,15 +181,7 @@ public class LyricService {
         } else {
             // 获取指定平台的歌词
             try {
-                if ("qq".equals(source)) {  // 歌词源为 QQ 音乐
-                    newLyric = qqMusicService.getLyric(windowTitle);
-                } else {  // 歌词源为网易云音乐（默认）
-                    if (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫")) {
-                        newLyric = qqMusicService.getLyric(windowTitle);
-                    } else {
-                        newLyric = neteaseMusicService.getLyric(windowTitle);
-                    }
-                }
+                newLyric = fetchFromSource(source, windowTitle);
             } catch (Exception e) {
                 log.error("获取 " + source + " 歌词失败：" + e.getMessage());
                 // 如果网络请求失败，则直接返回，不进行缓存
@@ -195,6 +190,21 @@ public class LyricService {
         }
 
         return newLyric;
+    }
+
+    private Lyric fetchFromSource(String source, String windowTitle) throws Exception {
+        switch (source) {
+            case "qq":
+                return qqMusicService.getLyric(windowTitle);
+            case "kugou":
+                return kuGouMusicService.getLyric(windowTitle);
+            case "netease":
+            default:
+                if (windowTitle.contains("周杰伦") || windowTitle.contains("周杰倫")) {
+                    return qqMusicService.getLyric(windowTitle);
+                }
+                return neteaseMusicService.getLyric(windowTitle);
+        }
     }
 
     /**
