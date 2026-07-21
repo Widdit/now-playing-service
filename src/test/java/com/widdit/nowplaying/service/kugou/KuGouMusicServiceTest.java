@@ -178,6 +178,34 @@ class KuGouMusicServiceTest {
     }
 
     @Test
+    void getLyricAcceptsOneDigitMinuteAndOneFractionDigit() throws IOException {
+        String lrc = "[0:05.5]单字";
+        String encoded = Base64.getEncoder().encodeToString(lrc.getBytes(StandardCharsets.UTF_8));
+        KuGouHttpClient client = lyricClientWithSearchResponse(LYRIC_SEARCH_RESPONSE);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(
+                "{\"status\":200,\"content\":\"" + encoded + "\"}");
+
+        Lyric lyric = new KuGouMusicService(client).getLyric("晴天 - 周杰伦");
+
+        assertTrue(lyric.getHasLyric());
+        assertEquals(lrc, lyric.getLrc());
+    }
+
+    @Test
+    void getLyricAcceptsThreeFractionDigitTimedTag() throws IOException {
+        String lrc = "[00:05.123]三位小数";
+        String encoded = Base64.getEncoder().encodeToString(lrc.getBytes(StandardCharsets.UTF_8));
+        KuGouHttpClient client = lyricClientWithSearchResponse(LYRIC_SEARCH_RESPONSE);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(
+                "{\"status\":200,\"content\":\"" + encoded + "\"}");
+
+        Lyric lyric = new KuGouMusicService(client).getLyric("晴天 - 周杰伦");
+
+        assertTrue(lyric.getHasLyric());
+        assertEquals(lrc, lyric.getLrc());
+    }
+
+    @Test
     void getLyricReturnsEmptyWhenCandidatesAreMissing() throws IOException {
         KuGouHttpClient client = lyricClientWithSearchResponse(
                 "{\"status\":200,\"candidates\":[]}");
@@ -252,6 +280,22 @@ class KuGouMusicServiceTest {
         KuGouHttpClient client = lyricClientWithSearchResponse(LYRIC_SEARCH_RESPONSE);
         when(client.get(contains("lyrics.kugou.com/download")))
                 .thenReturn("{\"status\":200,\"content\":\"not-base64%%%\"}");
+
+        Lyric lyric = assertDoesNotThrow(
+                () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));
+
+        assertEmptyKugouLyric(lyric);
+    }
+
+    @Test
+    void getLyricReturnsEmptyWhenDecodedBytesAreMalformedUtf8() throws IOException {
+        byte[] malformedLrc = new byte[]{
+                '[', '0', '0', ':', '0', '1', '.', '0', '0', ']', (byte) 0xC3, 0x28
+        };
+        String encoded = Base64.getEncoder().encodeToString(malformedLrc);
+        KuGouHttpClient client = lyricClientWithSearchResponse(LYRIC_SEARCH_RESPONSE);
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(
+                "{\"status\":200,\"content\":\"" + encoded + "\"}");
 
         Lyric lyric = assertDoesNotThrow(
                 () -> new KuGouMusicService(client).getLyric("晴天 - 周杰伦"));

@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Objects;
@@ -23,7 +26,7 @@ import java.util.regex.Pattern;
 public class KuGouMusicService {
 
     private static final Pattern LRC_TIME_TAG = Pattern.compile(
-            "(?m)^\\[\\d{2}:\\d{2}(?:\\.\\d{2})?]");
+            "(?m)^\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,3})?]");
 
     private final KuGouHttpClient httpClient;
 
@@ -95,10 +98,21 @@ public class KuGouMusicService {
             return lyric;
         }
 
+        byte[] decodedContent;
+        try {
+            decodedContent = Base64.getDecoder().decode(content);
+        } catch (IllegalArgumentException exception) {
+            return lyric;
+        }
+
         String lrc;
         try {
-            lrc = new String(Base64.getDecoder().decode(content), StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException exception) {
+            lrc = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(decodedContent))
+                    .toString();
+        } catch (CharacterCodingException exception) {
             return lyric;
         }
         if (!LRC_TIME_TAG.matcher(lrc).find()) {
