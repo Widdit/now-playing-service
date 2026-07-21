@@ -5,6 +5,7 @@ import com.widdit.nowplaying.entity.SettingsLyricCommon;
 import com.widdit.nowplaying.service.kugou.KuGouMusicService;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
+import com.widdit.nowplaying.util.SongMatchingUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -16,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -145,6 +147,24 @@ class LyricServiceTest {
 
         Lyric result = assertDoesNotThrow(context.service::getLyric);
         assertSame(qq, result);
+    }
+
+    @Test
+    void durationComparisonDoesNotOverflowAndAdmitACompleteLowerSimilarityCandidate() throws Exception {
+        String title = "Counting Stars";
+        String author = "OneRepublic";
+        TestContext context = autoContext(title + " - " + author, "qq");
+        Lyric netease = lyric("netease", title, author, 0, true, false, false);
+        Lyric qq = lyric("qq", title + " (翻译) (译名) (别名)", author,
+                Integer.MIN_VALUE, true, true, true);
+        Lyric kugou = lyric("kugou", "Different Song", "Other", 0, true, true, true);
+        stubAll(context, netease, qq, kugou);
+        int similarityDiff = SongMatchingUtil.calculateSimilarity(title, author, title, author)
+                - SongMatchingUtil.calculateSimilarity(title, author, qq.getTitle(), qq.getAuthor());
+
+        assertTrue(similarityDiff >= 3 && similarityDiff <= 8,
+                "fixture must exercise the duration-based closeness rule");
+        assertSame(netease, context.service.getLyric());
     }
 
     @Test
