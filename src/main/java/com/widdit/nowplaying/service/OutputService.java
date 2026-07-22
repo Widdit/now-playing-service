@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -184,9 +185,7 @@ public class OutputService {
      * @throws IOException
      */
     private void writeText(String filename, String text) throws IOException {
-        try (FileWriter writer = new FileWriter(filename, false)) {
-            writer.write(text);
-        }
+        Files.write(Paths.get(filename), text.getBytes(StandardCharsets.UTF_8));
     }
 
     /**
