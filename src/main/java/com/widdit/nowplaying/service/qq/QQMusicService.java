@@ -198,6 +198,26 @@ public class QQMusicService {
 
         // 1. 获取歌曲在 QQ 音乐的 ID 和基本信息
         Track track = search(keyword);
+        int matchThreshold = realAuthor == null || realAuthor.isBlank()
+                ? 75
+                : SongMatchingUtil.EXACT_MATCH_THRESHOLD;
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                realTitle, realAuthor, track.getTitle(), track.getAuthor());
+        String fallbackKeyword = SongUtil.buildSearchKeywordWithoutAnnotations(keyword);
+        if (similarity < matchThreshold && !fallbackKeyword.equals(keyword)) {
+            log.info("完整标题未匹配，改用主标题搜索：{}", fallbackKeyword);
+            try {
+                Track fallbackTrack = search(fallbackKeyword);
+                int fallbackSimilarity = SongMatchingUtil.calculateSimilarity(
+                        realTitle, realAuthor, fallbackTrack.getTitle(), fallbackTrack.getAuthor());
+                if (fallbackSimilarity > similarity) {
+                    track = fallbackTrack;
+                    similarity = fallbackSimilarity;
+                }
+            } catch (Exception exception) {
+                log.debug("QQ fallback song search failed: {}", exception.getClass().getSimpleName());
+            }
+        }
         String id = track.getId();
         String title = track.getTitle();
         String author = track.getAuthor();
@@ -212,13 +232,7 @@ public class QQMusicService {
         lyric.setDuration(duration);
 
         // 计算相似度，判断歌曲信息与真实信息是否匹配
-        int similarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, title, author);
-
-        int matchThreshold = SongMatchingUtil.EXACT_MATCH_THRESHOLD;
-        // 对于歌手名缺失的情况，可适当降低阈值标准
-        if (realAuthor == null || realAuthor.isBlank()) {
-            matchThreshold = 75;
-        }
+        similarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, title, author);
 
         // 如果歌曲错误，则说明 QQ 音乐没有该歌曲，也就没有必要再调用 API 获取歌词了
         if (similarity < matchThreshold) {

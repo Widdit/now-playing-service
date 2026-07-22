@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
@@ -85,6 +86,35 @@ class KuGouMusicServiceTest {
 
         assertEquals("STUDIO_HASH", song.getFileHash());
         assertEquals("studio", song.getTrack().getId());
+    }
+
+    @Test
+    void getLyricRetriesWithBaseTitleWhenTranslatedAnnotationHurtsSearch() throws IOException {
+        KuGouHttpClient client = mock(KuGouHttpClient.class);
+        when(client.get(contains("song_search_v2"))).thenReturn(
+                singleSongSearchResponse("少女A", "鏡音リン", 221),
+                singleSongSearchResponse("なりすましゲンガー", "鏡音リン", 229));
+        when(client.get(contains("lyrics.kugou.com/search"))).thenReturn(
+                "{\"status\":200,\"candidates\":[{"
+                        + "\"id\":\"gengar\","
+                        + "\"accesskey\":\"GENGAR_KEY\","
+                        + "\"singer\":\"鏡音リン、初音ミク、KulfiQ\","
+                        + "\"song\":\"なりすましゲンガー\","
+                        + "\"duration\":229000}]}");
+        when(client.get(contains("lyrics.kugou.com/download"))).thenReturn(LYRIC_DOWNLOAD_RESPONSE);
+
+        Lyric lyric = new KuGouMusicService(client)
+                .getLyric("なりすましゲンガー (乔装Gengar) - 鏡音リン");
+
+        assertTrue(lyric.getHasLyric());
+        assertEquals("なりすましゲンガー", lyric.getTitle());
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        verify(client, org.mockito.Mockito.times(4)).get(urlCaptor.capture());
+        String fallbackSearchUrl = URLDecoder.decode(
+                urlCaptor.getAllValues().get(1), StandardCharsets.UTF_8);
+        assertTrue(fallbackSearchUrl.contains(
+                "keyword=なりすましゲンガー - 鏡音リン"));
     }
 
     @Test

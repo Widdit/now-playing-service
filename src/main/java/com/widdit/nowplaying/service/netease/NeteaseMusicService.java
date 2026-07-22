@@ -232,6 +232,9 @@ public class NeteaseMusicService {
         String[] parseResult = SongUtil.parseWindowTitle(keyword);
         String realTitle = parseResult[0];
         String realAuthor = parseResult[1];
+        int matchThreshold = realAuthor == null || realAuthor.isBlank()
+                ? 75
+                : SongMatchingUtil.EXACT_MATCH_THRESHOLD;
 
         String title = "";
         String author = "";
@@ -283,6 +286,22 @@ public class NeteaseMusicService {
 
         if (id == null || "".equals(id)) {
             Track track = search(keyword);
+            int trackSimilarity = SongMatchingUtil.calculateSimilarity(
+                    realTitle, realAuthor, track.getTitle(), track.getAuthor());
+            String fallbackKeyword = SongUtil.buildSearchKeywordWithoutAnnotations(keyword);
+            if (trackSimilarity < matchThreshold && !fallbackKeyword.equals(keyword)) {
+                log.info("完整标题未匹配，改用主标题搜索：{}", fallbackKeyword);
+                try {
+                    Track fallbackTrack = search(fallbackKeyword);
+                    int fallbackSimilarity = SongMatchingUtil.calculateSimilarity(
+                            realTitle, realAuthor, fallbackTrack.getTitle(), fallbackTrack.getAuthor());
+                    if (fallbackSimilarity > trackSimilarity) {
+                        track = fallbackTrack;
+                    }
+                } catch (Exception exception) {
+                    log.debug("Netease fallback song search failed: {}", exception.getClass().getSimpleName());
+                }
+            }
             id = track.getId();
             title = track.getTitle();
             author = track.getAuthor();
@@ -299,12 +318,6 @@ public class NeteaseMusicService {
 
         // 计算相似度，判断歌曲信息与真实信息是否匹配
         int similarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, title, author);
-
-        int matchThreshold = SongMatchingUtil.EXACT_MATCH_THRESHOLD;
-        // 对于歌手名缺失的情况，可适当降低阈值标准
-        if (realAuthor == null || realAuthor.isBlank()) {
-            matchThreshold = 75;
-        }
 
         // 如果歌曲错误，则说明网易云音乐没有该歌曲，也就没有必要再调用 API 获取歌词了
         if (similarity < matchThreshold) {

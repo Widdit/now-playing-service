@@ -74,7 +74,8 @@ public class KuGouMusicService {
             String realTitle,
             String realAuthor,
             Lyric lyric) throws IOException {
-        KuGouSong song = searchSong(keyword);
+        String searchKeyword = keyword;
+        KuGouSong song = searchSong(searchKeyword);
         Track track = song.getTrack();
 
         lyric.setTitle(track.getTitle());
@@ -84,6 +85,27 @@ public class KuGouMusicService {
         int matchThreshold = getMatchThreshold(realAuthor);
         int trackSimilarity = SongMatchingUtil.calculateSimilarity(
                 realTitle, realAuthor, track.getTitle(), track.getAuthor());
+        String fallbackKeyword = SongUtil.buildSearchKeywordWithoutAnnotations(keyword);
+        if (trackSimilarity < matchThreshold && !fallbackKeyword.equals(keyword)) {
+            log.info("完整标题未匹配，改用主标题搜索：{}", fallbackKeyword);
+            try {
+                KuGouSong fallbackSong = searchSong(fallbackKeyword);
+                Track fallbackTrack = fallbackSong.getTrack();
+                int fallbackSimilarity = SongMatchingUtil.calculateSimilarity(
+                        realTitle, realAuthor, fallbackTrack.getTitle(), fallbackTrack.getAuthor());
+                if (fallbackSimilarity > trackSimilarity) {
+                    searchKeyword = fallbackKeyword;
+                    song = fallbackSong;
+                    track = fallbackTrack;
+                    trackSimilarity = fallbackSimilarity;
+                    lyric.setTitle(track.getTitle());
+                    lyric.setAuthor(track.getAuthor());
+                    lyric.setDuration(track.getDuration());
+                }
+            } catch (IOException | RuntimeException exception) {
+                log.debug("Kugou fallback song search failed: {}", exception.getClass().getSimpleName());
+            }
+        }
         if (trackSimilarity < matchThreshold) {
             lyric.setTitle(realTitle);
             lyric.setAuthor(realAuthor);
@@ -91,7 +113,7 @@ public class KuGouMusicService {
         }
 
         JSONObject candidate = findBestLyricCandidate(
-                keyword, song, realTitle, realAuthor, matchThreshold);
+                searchKeyword, song, realTitle, realAuthor, matchThreshold);
         if (candidate == null) {
             return lyric;
         }

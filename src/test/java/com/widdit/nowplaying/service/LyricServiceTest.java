@@ -6,6 +6,7 @@ import com.widdit.nowplaying.service.kugou.KuGouMusicService;
 import com.widdit.nowplaying.service.netease.NeteaseMusicService;
 import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.SongMatchingUtil;
+import com.widdit.nowplaying.util.SongUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -28,6 +29,95 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class LyricServiceTest {
+
+    @Test
+    void fallbackSearchKeywordRemovesTranslatedTitleAnnotation() {
+        assertEquals(
+                "なりすましゲンガー - 鏡音リン",
+                SongUtil.buildSearchKeywordWithoutAnnotations(
+                        "なりすましゲンガー (乔装Gengar) - 鏡音リン"));
+    }
+
+    @Test
+    void translatedCjkTitleMatchesKugouMultiArtistCandidate() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "希望有羽毛和翅膀 (Hope Is the Thing With Feathers)",
+                "知更鸟",
+                "希望有羽毛和翅膀",
+                "知更鸟、HOYO-MiX、Chevy");
+
+        assertEquals(96, similarity);
+        assertTrue(similarity >= SongMatchingUtil.EXACT_MATCH_THRESHOLD);
+    }
+
+    @Test
+    void japaneseArtistSeparatorAndMissingFeaturedSingerStillMatchLyricCandidate() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "目撃！テト31世 (Teto the 31st)(feat. 重音テト & 雨衣)",
+                "はろける",
+                "目撃！テト31世",
+                "はろける、雨衣");
+
+        assertEquals(88, similarity);
+        assertTrue(similarity >= SongMatchingUtil.EXACT_MATCH_THRESHOLD);
+    }
+
+    @Test
+    void japaneseAndSlashArtistSeparatorsAreEquivalent() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "芒种",
+                "音阙诗听、赵方婧",
+                "芒种",
+                "音阙诗听 / 赵方婧");
+
+        assertEquals(100, similarity);
+    }
+
+    @Test
+    void latinTranslationInLocalCjkTitleMatchesProviderBaseTitle() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "アイドル (Idol)",
+                "YOASOBI",
+                "アイドル",
+                "YOASOBI");
+
+        assertEquals(96, similarity);
+        assertTrue(similarity >= SongMatchingUtil.EXACT_MATCH_THRESHOLD);
+    }
+
+    @Test
+    void localVersionMarkerIsNotTreatedAsTranslation() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "アイドル (Live)",
+                "YOASOBI",
+                "アイドル",
+                "YOASOBI");
+
+        assertTrue(similarity < SongMatchingUtil.EXACT_MATCH_THRESHOLD);
+    }
+
+    @Test
+    void featuredArtistInTitleMatchesProviderArtistList() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "溯 (Reverse)(feat. 马吟吟)",
+                "CORSAK胡梦周",
+                "溯 (Reverse)",
+                "CORSAK胡梦周 / 马吟吟");
+
+        assertEquals(100, similarity);
+        assertTrue(similarity >= SongMatchingUtil.EXACT_MATCH_THRESHOLD);
+    }
+
+    @Test
+    void differentFeaturedArtistStillFailsExactMatch() {
+        int similarity = SongMatchingUtil.calculateSimilarity(
+                "溯 (Reverse)(feat. 马吟吟)",
+                "CORSAK胡梦周",
+                "溯 (Reverse)",
+                "CORSAK胡梦周 / 其他歌手");
+
+        assertTrue(similarity < SongMatchingUtil.EXACT_MATCH_THRESHOLD);
+    }
 
     @Test
     void autoModeRequestsAllThreeSourcesForJayAndPrefersKugouWhenResultsTie() throws Exception {

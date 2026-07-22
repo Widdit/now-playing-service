@@ -65,6 +65,14 @@ public class SongMatchingUtil {
             "explicit", "clean", "original mix", "feat", "ft.", "翻译", "译名", "又名", "别名", "原名", "aka"
     ));
 
+    private static final Pattern PARENTHESIZED_FEATURED_ARTISTS = Pattern.compile(
+            "\\(\\s*(?:feat(?:uring)?|ft)(?:\\.|\\b)\\s*[:\\-]?\\s*([^()]*)\\)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern INLINE_FEATURED_ARTISTS = Pattern.compile(
+            "\\s+(?:feat(?:uring)?|ft)(?:\\.|\\b)\\s*[:\\-]?\\s*(.+)$",
+            Pattern.CASE_INSENSITIVE);
+    private static final String ARTIST_SEPARATOR_PATTERN = "[/、，,&;；]";
+
     // ==================== 核心公共方法 ====================
 
     /**
@@ -82,6 +90,15 @@ public class SongMatchingUtil {
         if (isNullOrEmpty(localTitle) || isNullOrEmpty(cloudTitle)) {
             return 0;
         }
+
+        // 不同平台可能把合作歌手放在歌名或歌手列表中。先统一到歌手列表，
+        // 避免 "Song (feat. B) - A" 与 "Song - A / B" 被误判为不同歌曲。
+        String[] localMetadata = normalizeFeaturedArtists(localTitle, localArtist);
+        String[] cloudMetadata = normalizeFeaturedArtists(cloudTitle, cloudArtist);
+        localTitle = localMetadata[0];
+        localArtist = localMetadata[1];
+        cloudTitle = cloudMetadata[0];
+        cloudArtist = cloudMetadata[1];
 
         // 预处理：统一格式
         localTitle = normalize(localTitle);
@@ -112,6 +129,58 @@ public class SongMatchingUtil {
     }
 
     // ==================== 预处理方法 ====================
+
+    private static String[] normalizeFeaturedArtists(String title, String artist) {
+        String cleanedTitle = title == null ? "" : title;
+        List<String> featuredArtists = new ArrayList<>();
+
+        Matcher parenthesizedMatcher = PARENTHESIZED_FEATURED_ARTISTS.matcher(cleanedTitle);
+        StringBuffer titleWithoutParenthesizedCredits = new StringBuffer();
+        while (parenthesizedMatcher.find()) {
+            String featuredArtist = parenthesizedMatcher.group(1).trim();
+            if (!featuredArtist.isEmpty()) {
+                featuredArtists.add(featuredArtist);
+            }
+            parenthesizedMatcher.appendReplacement(titleWithoutParenthesizedCredits, "");
+        }
+        parenthesizedMatcher.appendTail(titleWithoutParenthesizedCredits);
+        cleanedTitle = titleWithoutParenthesizedCredits.toString();
+
+        Matcher inlineMatcher = INLINE_FEATURED_ARTISTS.matcher(cleanedTitle);
+        if (inlineMatcher.find()) {
+            String featuredArtist = inlineMatcher.group(1).trim();
+            if (!featuredArtist.isEmpty()) {
+                featuredArtists.add(featuredArtist);
+            }
+            cleanedTitle = cleanedTitle.substring(0, inlineMatcher.start());
+        }
+
+        LinkedHashMap<String, String> uniqueArtists = new LinkedHashMap<>();
+        addArtistCredits(uniqueArtists, artist, ARTIST_SEPARATOR_PATTERN);
+        for (String featuredArtist : featuredArtists) {
+            addArtistCredits(uniqueArtists, featuredArtist, ARTIST_SEPARATOR_PATTERN);
+        }
+
+        cleanedTitle = cleanedTitle.replaceAll("\\s+", " ").trim();
+        return new String[] {cleanedTitle, String.join(" / ", uniqueArtists.values())};
+    }
+
+    private static void addArtistCredits(
+            LinkedHashMap<String, String> uniqueArtists,
+            String credits,
+            String separatorPattern) {
+        if (credits == null || credits.isBlank()) {
+            return;
+        }
+        for (String credit : credits.split(separatorPattern)) {
+            String trimmedCredit = credit.trim();
+            if (trimmedCredit.isEmpty()) {
+                continue;
+            }
+            String key = normalize(trimmedCredit).replace(" ", "");
+            uniqueArtists.putIfAbsent(key, trimmedCredit);
+        }
+    }
 
     /**
      * 预处理文本：统一格式，便于比较
@@ -290,7 +359,7 @@ public class SongMatchingUtil {
         }
 
         // ========== 第二步：计算括号内容的惩罚 ==========
-        int extraPenalty = calculateExtraPenalty(localExtras, cloudExtras);
+        int extraPenalty = calculateExtraPenalty(localBase, localExtras, cloudBase, cloudExtras);
         score -= extraPenalty;
 
         return Math.max(0, score);
@@ -300,7 +369,8 @@ public class SongMatchingUtil {
      * 计算括号内容不匹配的惩罚分数
      * 返回需要扣除的分数（0-70）
      */
-    private static int calculateExtraPenalty(List<String> localExtras, List<String> cloudExtras) {
+    private static int calculateExtraPenalty(String localBase, List<String> localExtras,
+                                             String cloudBase, List<String> cloudExtras) {
         boolean localHasExtra = !localExtras.isEmpty();
         boolean cloudHasExtra = !cloudExtras.isEmpty();
 
@@ -311,12 +381,12 @@ public class SongMatchingUtil {
 
         // 情况1：本地有括号，云端没有
         if (localHasExtra && !cloudHasExtra) {
-            return handleLocalHasExtraPenalty(localExtras);
+            return handleLocalHasExtraPenalty(localBase, localExtras);
         }
 
         // 情况2：本地没括号，云端有括号
         if (!localHasExtra && cloudHasExtra) {
-            return handleCloudHasExtraPenalty(cloudExtras);
+            return handleCloudHasExtraPenalty(cloudBase, cloudExtras);
         }
 
         // 情况3：两者都有括号 - 详细比较内容
@@ -327,7 +397,7 @@ public class SongMatchingUtil {
      * 处理情况1：本地有括号信息，云端没有
      * 返回惩罚分数
      */
-    private static int handleLocalHasExtraPenalty(List<String> localExtras) {
+    private static int handleLocalHasExtraPenalty(String localBase, List<String> localExtras) {
         boolean hasSignificant = false;
         boolean onlyHarmless = true;
 
@@ -336,7 +406,7 @@ public class SongMatchingUtil {
                 hasSignificant = true;
                 onlyHarmless = false;
                 break;
-            } else if (!isLikelyTranslationOrAlias(extra)) {
+            } else if (!isLikelyTranslationOrAlias(localBase, extra)) {
                 onlyHarmless = false;
             }
         }
@@ -360,14 +430,14 @@ public class SongMatchingUtil {
      * 处理情况2：云端有括号信息，本地没有
      * 返回惩罚分数
      */
-    private static int handleCloudHasExtraPenalty(List<String> cloudExtras) {
+    private static int handleCloudHasExtraPenalty(String cloudBase, List<String> cloudExtras) {
         boolean hasSignificant = false;
         boolean onlyHarmless = true;
         int aliasCount = 0;
 
         for (String extra : cloudExtras) {
             // 先检查是否是翻译类标注
-            if (isLikelyTranslationOrAlias(extra)) {
+            if (isLikelyTranslationOrAlias(cloudBase, extra)) {
                 aliasCount++;
                 continue;
             }
@@ -619,7 +689,7 @@ public class SongMatchingUtil {
     /**
      * 检查文本是否看起来像翻译或别名
      */
-    private static boolean isLikelyTranslationOrAlias(String text) {
+    private static boolean isLikelyTranslationOrAlias(String baseTitle, String text) {
         // 检查是否包含无害关键词
         if (containsHarmlessKeyword(text)) {
             return true;
@@ -635,8 +705,17 @@ public class SongMatchingUtil {
         if (text.length() < 30) {
             boolean hasCJK = text.matches(".*[\\u4e00-\\u9fa5\\u3040-\\u309f\\u30a0-\\u30ff\\uac00-\\ud7af]+.*");
             boolean fewLatinWords = !text.matches(".*[a-zA-Z]{4,}.*");
+            boolean baseHasCJK = baseTitle != null
+                    && baseTitle.matches(".*[\\u4e00-\\u9fa5\\u3040-\\u309f\\u30a0-\\u30ff\\uac00-\\ud7af]+.*");
 
-            if (hasCJK && fewLatinWords) {
+            if (hasCJK && (fewLatinWords || baseHasCJK)) {
+                return true;
+            }
+
+            // 常见跨平台差异：本地标题保留英文译名/罗马音，而云端只保留 CJK 主标题，
+            // 例如 "アイドル (Idol)" 与 "アイドル"。版本关键词已在上方排除。
+            boolean isShortLatinAlias = text.matches("[a-zA-Z][a-zA-Z0-9\\s'’&.,!?-]*");
+            if (baseHasCJK && isShortLatinAlias) {
                 return true;
             }
         }
@@ -715,8 +794,8 @@ public class SongMatchingUtil {
             return artists;
         }
 
-        // 按 / 分割歌手
-        String[] parts = artistStr.split("/");
+        // 各平台会使用 /、顿号、逗号、& 或分号连接多位歌手
+        String[] parts = artistStr.split(ARTIST_SEPARATOR_PATTERN);
         for (String part : parts) {
             String trimmed = part.trim();
             if (!trimmed.isEmpty()) {
