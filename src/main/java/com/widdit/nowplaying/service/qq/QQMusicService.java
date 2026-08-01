@@ -58,23 +58,32 @@ public class QQMusicService {
         }
 
         // 缓存未命中，执行网络请求逻辑
-        // 构建请求体
-        JSONObject param = new JSONObject();
-        param.put("search_type", 0);
-        param.put("query", keyword);
-        param.put("page_num", 1);
-        param.put("num_per_page", 8);
-
-        JSONObject req1 = new JSONObject();
-        req1.put("method", "DoSearchForQQMusicDesktop");
-        req1.put("module", "music.search.SearchCgiService");
-        req1.put("param", param);
-
-        JSONObject requestBody = new JSONObject();
-        requestBody.put("req_1", req1);
+        // 构建请求参数
+        Map<String, String> params = new HashMap<>();
+        params.put("ct", "24");
+        params.put("qqmusic_ver", "1298");
+        params.put("remoteplace", "txt.yqq.center");
+        params.put("t", "0");
+        params.put("aggr", "1");
+        params.put("cr", "1");
+        params.put("catZhida", "1");
+        params.put("lossless", "0");
+        params.put("flag_qc", "0");
+        params.put("p", "1");  // 关键参数：页码
+        params.put("n", "8");  // 关键参数：每页数量
+        params.put("w", keyword);  // 关键参数：搜索关键词
+        params.put("g_tk", "5381");
+        params.put("loginUin", "0");
+        params.put("hostUin", "0");
+        params.put("format", "json");
+        params.put("inCharset", "utf8");
+        params.put("outCharset", "utf-8");
+        params.put("notice", "0");
+        params.put("platform", "yqq");
+        params.put("needNewCode", "0");
 
         // 发送搜索歌曲请求
-        String respStr = sendPostRequest("https://u.y.qq.com/cgi-bin/musicu.fcg", requestBody.toJSONString());
+        String respStr = sendGetRequest("https://c.y.qq.com/soso/fcgi-bin/client_search_cp", params);
 
         // 解析 JSON 字符串为 JSONObject
         JSONObject jsonObject = JSON.parseObject(respStr);
@@ -85,7 +94,7 @@ public class QQMusicService {
         }
 
         // 提取所需字段
-        JSONArray songs = jsonObject.getJSONObject("req_1").getJSONObject("data").getJSONObject("body").getJSONObject("song").getJSONArray("list");
+        JSONArray songs = jsonObject.getJSONObject("data").getJSONObject("song").getJSONArray("list");
 
         // 检查数组是否为空
         if (songs == null || songs.isEmpty()) {
@@ -109,7 +118,7 @@ public class QQMusicService {
             JSONObject song = songs.getJSONObject(index);
 
             // 提取歌曲标题
-            String songTitle = song.getString("title");
+            String songTitle = song.getString("songname");
 
             // 提取歌手名
             JSONArray artists = song.getJSONArray("singer");
@@ -139,7 +148,7 @@ public class QQMusicService {
         }
 
         // 从最佳匹配的歌曲中提取最终信息
-        String title = bestMatchSong.getString("title");
+        String title = bestMatchSong.getString("songname");
 
         JSONArray artists = bestMatchSong.getJSONArray("singer");
         StringBuilder authorBuilder = new StringBuilder();
@@ -151,9 +160,9 @@ public class QQMusicService {
         }
         String author = authorBuilder.toString();
 
-        String id = bestMatchSong.getString("id");
-        String album = bestMatchSong.getJSONObject("album").getString("name");
-        String albumMid = bestMatchSong.getJSONObject("album").getString("mid");
+        String id = bestMatchSong.getString("songid");
+        String album = bestMatchSong.getString("albumname");
+        String albumMid = bestMatchSong.getString("albummid");
         Integer duration = bestMatchSong.getInteger("interval");
 
         // 计算出格式化的时长
