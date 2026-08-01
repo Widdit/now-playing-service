@@ -65,6 +65,8 @@ public class SettingsLyric {
 
     private Boolean karaokeLyricEnabled = true;
 
+    private Boolean convertToTraditional = false;
+
     private Integer timeOffset = 0;
 
     private Boolean showTitleWhenNoLyric = false;
