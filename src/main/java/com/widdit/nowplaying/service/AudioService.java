@@ -164,8 +164,13 @@ public class AudioService {
                             windowTitle = newWindowTitle;
                         }
 
-                        // 发布事件，通知变化
-                        eventPublisher.publishEvent(new MusicStatusUpdatedEvent(this, "音乐状态被更新"));
+                        // 发布事件，通知变化（事件监听器中抛出的异常不能中断本读取线程，
+                        // 否则 C# 端的后续输出将无人消费，歌曲状态会永久冻结）
+                        try {
+                            eventPublisher.publishEvent(new MusicStatusUpdatedEvent(this, "音乐状态被更新"));
+                        } catch (Exception e) {
+                            log.warn("发布音乐状态更新事件失败：{}", e.getMessage());
+                        }
                     }
                 } catch (Exception e) {
                     if (getMusicStatusProcess != null && getMusicStatusProcess.isAlive()) {
