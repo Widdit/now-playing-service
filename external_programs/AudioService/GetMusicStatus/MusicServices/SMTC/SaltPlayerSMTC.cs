@@ -69,6 +69,8 @@ public class SaltPlayerSMTC : MusicService
         string status = null;
         string title = null;
         string artist = null;
+        int currentSec = -1;
+        int totalSec = -1;
 
         try
         {
@@ -79,6 +81,14 @@ public class SaltPlayerSMTC : MusicService
             status = playbackStatus == Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing
                 ? "Playing"
                 : "Paused";
+
+            // 获取 SMTC 时间轴，使后端能在用户拖动进度后立即校准
+            var timeline = mediaSession.ControlSession.GetTimelineProperties();
+            if (timeline != null)
+            {
+                currentSec = Math.Max(0, (int)timeline.Position.TotalSeconds);
+                totalSec = Math.Max(0, (int)timeline.EndTime.TotalSeconds);
+            }
 
             // 获取歌曲信息
             var songInfo = mediaSession.ControlSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
@@ -109,9 +119,15 @@ public class SaltPlayerSMTC : MusicService
             return "None";
         }
 
-        // 输出结果（格式：歌名 - 歌手）
+        // 输出结果（格式：歌名 - 歌手；第三行为精确进度）
         string songTitle = string.IsNullOrEmpty(artist) ? title : $"{title} - {artist}";
-        Log($"detected: {status} / {songTitle}");
+        Log($"detected: {status} / {songTitle} / progress={currentSec}|{totalSec}");
+
+        if (currentSec >= 0 && totalSec > 0)
+        {
+            return $"{status}\r\n{songTitle}\r\nProgress:{currentSec}|{totalSec}";
+        }
+
         return $"{status}\r\n{songTitle}";
     }
 
