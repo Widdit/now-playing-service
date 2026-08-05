@@ -57,12 +57,34 @@ public class SaltPlayerSMTC : MusicService
             }
         }
 
-        // 获取媒体会话
-        var mediaSessions = mediaManager.CurrentMediaSessions;
-        var mediaSession = mediaSessions[sessionId];
-        if (mediaSession == null)
+        // 会话可能在轮询期间关闭，使用安全查找避免字典索引异常终止检测进程
+        MediaManager.MediaSession mediaSession;
+        try
         {
-            Log($"session \"{sessionId}\" disappeared from CurrentMediaSessions");
+            var mediaSessions = mediaManager.CurrentMediaSessions;
+            if (!mediaSessions.TryGetValue(sessionId, out mediaSession) || mediaSession == null)
+            {
+                Log($"session \"{sessionId}\" disappeared from CurrentMediaSessions");
+                hasSession = false;
+                sessionId = null;
+
+                if (!TryFindExistingSession())
+                {
+                    return "None";
+                }
+
+                mediaSessions = mediaManager.CurrentMediaSessions;
+                if (!mediaSessions.TryGetValue(sessionId, out mediaSession) || mediaSession == null)
+                {
+                    return "None";
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Log($"failed to resolve session: {e.GetType().Name}: {e.Message}");
+            hasSession = false;
+            sessionId = null;
             return "None";
         }
 
@@ -128,7 +150,8 @@ public class SaltPlayerSMTC : MusicService
             return $"{status}\r\n{songTitle}\r\nProgress:{currentSec}|{totalSec}";
         }
 
-        return $"{status}\r\n{songTitle}";
+        // 即使时间轴暂时不可用，也显式通知 Java 清空旧进度，避免继续沿用拖动前的位置
+        return $"{status}\r\n{songTitle}\r\nProgress:-1|-1";
     }
 
     private bool TryFindExistingSession()
@@ -170,9 +193,10 @@ public class SaltPlayerSMTC : MusicService
     {
         Log($"session closed: \"{session.Id}\"");
 
-        if (IsSaltPlayerSession(session.Id))
+        if (IsSaltPlayerSession(session.Id) && session.Id == sessionId)
         {
             hasSession = false;
+            sessionId = null;
         }
     }
 }

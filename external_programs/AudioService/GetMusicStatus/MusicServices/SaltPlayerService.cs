@@ -64,18 +64,15 @@ public class SaltPlayerService : MusicService
             return "None";
         }
 
-        // 处理最小化或无主窗口的情况
+        // 处理最小化、无主窗口或主窗口只显示应用名称的情况
         try
         {
-            if (string.IsNullOrEmpty(windowTitle))
+            if (!IsSongTitle(windowTitle))
             {
-                List<string> allTitles = WindowDetector.GetWindowTitles("Salt Player");
+                List<string> allTitles = WindowDetector.GetWindowTitles("Salt Player for Windows");
                 foreach (string title in allTitles)
                 {
-                    // 跳过空标题和应用名称
-                    if (!string.IsNullOrEmpty(title) &&
-                        !title.Equals("Salt Player for Windows") &&
-                        title.Contains(" - "))
+                    if (IsSongTitle(title))
                     {
                         windowTitle = title;
                         break;
@@ -88,16 +85,19 @@ public class SaltPlayerService : MusicService
             return "None";
         }
 
-        // 如果窗口标题为空或只是应用名称，则返回 None
-        if (string.IsNullOrEmpty(windowTitle) ||
-            windowTitle.Equals("Salt Player for Windows") ||
-            !windowTitle.Contains(" - "))
+        if (!IsSongTitle(windowTitle))
         {
             return "None";
         }
 
-        // 输出结果
         string status = volume > 0.00001 ? "Playing" : "Paused";
         return $"{status}\r\n{windowTitle}";
+    }
+
+    private static bool IsSongTitle(string title)
+    {
+        return !string.IsNullOrWhiteSpace(title)
+            && !title.Equals("Salt Player for Windows", StringComparison.OrdinalIgnoreCase)
+            && title.Contains(" - ");
     }
 }
