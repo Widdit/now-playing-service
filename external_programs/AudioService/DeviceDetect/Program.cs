@@ -18,6 +18,15 @@ class Program
         {
             GetDefaultAudioSessionManager2(DataFlow.Render);
 
+            // SPW 主要通过 SMTC 检测，不依赖音频会话设备；部分设备上其音频会话也
+            // 不会暴露有效 PeakValue。进程存在时直接选用默认设备，避免智能识别误报 None。
+            if ("saltplayer".Equals(platform, StringComparison.OrdinalIgnoreCase)
+                && Process.GetProcessesByName("Salt Player for Windows").Length > 0)
+            {
+                Console.WriteLine("default");
+                return;
+            }
+
             List<AudioSessionManager2> sessionManagers = GetAllAudioSessionManager2(DataFlow.Render);
             int i = 0;
 

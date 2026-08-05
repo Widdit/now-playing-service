@@ -28,7 +28,8 @@ namespace ProcessChecker
             { "miebo", "咩播" },
             { "yesplay", "YesPlayMusic" },
             { "cider", "Cider" },
-            { "wesing", "WeSing" }
+            { "wesing", "WeSing" },
+            { "saltplayer", "Salt Player for Windows" }
         };
 
         static void Main(string platform = "netease")
