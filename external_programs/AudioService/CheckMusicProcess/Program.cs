@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Text;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -28,25 +29,21 @@ namespace ProcessChecker
             { "miebo", "咩播" },
             { "yesplay", "YesPlayMusic" },
             { "cider", "Cider" },
-            { "wesing", "WeSing" }
+            { "wesing", "WeSing" },
+            // 浏览器平台可能使用多种浏览器，用 "|" 分隔多个进程名，任一存在即视为运行中
+            { "browser", "chrome|msedge|firefox" }
         };
 
         static void Main(string platform = "netease")
         {
             Console.OutputEncoding = Encoding.UTF8;
 
-            if (PlatformProcessMap.TryGetValue(platform, out string targetProcessName))
+            if (PlatformProcessMap.TryGetValue(platform, out string targetProcessNames))
             {
-                Process[] processes = Process.GetProcessesByName(targetProcessName);
+                bool isRunning = targetProcessNames.Split('|')
+                    .Any(name => Process.GetProcessesByName(name).Length > 0);
 
-                if (processes.Length > 0)
-                {
-                    Console.WriteLine("true");
-                }
-                else
-                {
-                    Console.WriteLine("false");
-                }
+                Console.WriteLine(isRunning ? "true" : "false");
             }
             else
             {
