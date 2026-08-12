@@ -119,6 +119,9 @@ public class SongMatchingUtil {
     private static String normalize(String text) {
         if (text == null) return "";
 
+        // 繁简归一化：统一转为简体，避免本地繁体歌名与云端简体歌名匹配失败
+        text = ZhConverter.toSimplified(text);
+
         // 转小写
         text = text.toLowerCase();
 
