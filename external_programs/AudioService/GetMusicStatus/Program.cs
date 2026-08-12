@@ -85,6 +85,7 @@ class Program
             { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
             { "wesing", (smtc) => new WeSingService() },
             { "saltplayer", (smtc) => smtc ? new SaltPlayerSMTC() : new SaltPlayerService() },
+            { "browser", (smtc) => new BrowserSMTC() },
         };
 
         MusicService musicService;

@@ -316,6 +316,7 @@ public class NowPlayingService {
         otherPlatforms.put("yesplay", "YesPlayMusic");
         otherPlatforms.put("cider", "Cider");
         otherPlatforms.put("saltplayer", "Salt Player for Windows");
+        otherPlatforms.put("browser", "浏览器");
     }
 
     /**
@@ -325,6 +326,14 @@ public class NowPlayingService {
     private void handleCSharpProgressUpdate() {
         int csharpProgress = audioService.getProgressSeconds();
         String platform = audioService.getCurrentPlatform();
+
+        // C# 端提供的总时长比在线搜索的结果更准确（搜索可能匹配到不同时长的版本），用它修正歌曲时长，
+        // 否则进度超过搜索结果的时长时，会被 advanceSeekbar 每秒误判为单曲循环重唱
+        int csharpTotal = audioService.getTotalSeconds();
+        if (csharpTotal > 0 && track.getDuration() != csharpTotal) {
+            track.setDuration(csharpTotal);
+            track.setDurationHuman(TimeUtil.getFormattedDuration(csharpTotal));
+        }
 
         // 检测重唱（进度大幅回跳），仅全民 K 歌平台生效
         if ("wesing".equals(platform)

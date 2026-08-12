@@ -41,6 +41,12 @@ public class QQMusicService {
         VERBATIM_XML_MAPPING_DICT.put("Lyric_1", "lyric");      // 解压后的内容
     }
 
+    // 新接口风控相关变量：记录新接口上次失败的时间戳（-1 表示未失败过）
+    private volatile long newApiFailTimestamp = -1;
+
+    // 新接口失败后的冷却时间（10 分钟，单位毫秒）
+    private static final long NEW_API_COOLDOWN_MS = 10 * 60 * 1000L;
+
     /**
      * 根据关键词搜索歌曲，返回歌曲信息对象
      * @param keyword 关键词
@@ -57,7 +63,152 @@ public class QQMusicService {
             }
         }
 
+        // 判断新接口是否处于冷却期
+        boolean newApiInCooldown = newApiFailTimestamp != -1
+                && (System.currentTimeMillis() - newApiFailTimestamp) < NEW_API_COOLDOWN_MS;
+
+        if (newApiInCooldown) {
+            // 新接口处于冷却期，直接调用旧接口
+            return searchAlternative(keyword);
+        }
+
         // 缓存未命中，执行网络请求逻辑
+        // 构建请求体
+        JSONObject param = new JSONObject();
+        param.put("search_type", 0);
+        param.put("query", keyword);
+        param.put("page_num", 1);
+        param.put("num_per_page", 8);
+
+        JSONObject req1 = new JSONObject();
+        req1.put("method", "DoSearchForQQMusicDesktop");
+        req1.put("module", "music.search.SearchCgiService");
+        req1.put("param", param);
+
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("req_1", req1);
+
+        // 发送搜索歌曲请求
+        String respStr = sendPostRequest("https://u.y.qq.com/cgi-bin/musicu.fcg", requestBody.toJSONString());
+
+        // 解析 JSON 字符串为 JSONObject
+        JSONObject jsonObject = JSON.parseObject(respStr);
+
+        // 检查响应数据的 req_1 的 code
+        JSONObject req1Resp = jsonObject.getJSONObject("req_1");
+        if (req1Resp == null || req1Resp.getIntValue("code") != 0) {
+            log.warn("新搜索接口响应错误，将在未来 10 分钟内使用旧接口兜底。响应内容：" + respStr);
+            newApiFailTimestamp = System.currentTimeMillis();
+            return searchAlternative(keyword);
+        }
+
+        // 提取所需字段
+        JSONArray songs = jsonObject.getJSONObject("req_1").getJSONObject("data").getJSONObject("body").getJSONObject("song").getJSONArray("list");
+
+        // 检查数组是否为空
+        if (songs == null || songs.isEmpty()) {
+            throw new RuntimeException("QQ 音乐歌曲信息获取失败，搜索结果为空");
+        }
+
+        // 最多遍历前 8 个元素
+        int maxCount = Math.min(songs.size(), 8);
+
+        // 解析出本地歌曲信息，用于后续计算歌曲信息匹配度
+        String[] parseResult = SongUtil.parseWindowTitle(keyword);
+        String localTitle = parseResult[0];
+        String localAuthor = parseResult[1];
+
+        // 用于记录最佳匹配的歌曲
+        JSONObject bestMatchSong = null;
+        int highestSimilarity = -1;
+
+        // 遍历歌曲数组
+        for (int index = 0; index < maxCount; index++) {
+            JSONObject song = songs.getJSONObject(index);
+
+            // 提取歌曲标题
+            String songTitle = song.getString("title");
+
+            // 提取歌手名
+            JSONArray artists = song.getJSONArray("singer");
+            StringBuilder authorBuilder = new StringBuilder();
+            for (int i = 0; i < artists.size(); i++) {
+                if (authorBuilder.length() > 0) {
+                    authorBuilder.append(" / ");
+                }
+                authorBuilder.append(artists.getJSONObject(i).getString("name"));
+            }
+            String songAuthor = authorBuilder.toString();
+
+            // 计算相似度
+            int similarity = SongMatchingUtil.calculateSimilarity(localTitle, localAuthor, songTitle, songAuthor);
+
+            // 如果完美匹配，直接选中并退出循环
+            if (similarity >= 100) {
+                bestMatchSong = song;
+                break;
+            }
+
+            // 记录相似度最高的歌曲
+            if (similarity > highestSimilarity) {
+                highestSimilarity = similarity;
+                bestMatchSong = song;
+            }
+        }
+
+        // 从最佳匹配的歌曲中提取最终信息
+        String title = bestMatchSong.getString("title");
+
+        JSONArray artists = bestMatchSong.getJSONArray("singer");
+        StringBuilder authorBuilder = new StringBuilder();
+        for (int i = 0; i < artists.size(); i++) {
+            if (authorBuilder.length() > 0) {
+                authorBuilder.append(" / ");
+            }
+            authorBuilder.append(artists.getJSONObject(i).getString("name"));
+        }
+        String author = authorBuilder.toString();
+
+        String id = bestMatchSong.getString("id");
+        String album = bestMatchSong.getJSONObject("album").getString("name");
+        String albumMid = bestMatchSong.getJSONObject("album").getString("mid");
+        Integer duration = bestMatchSong.getInteger("interval");
+
+        // 计算出格式化的时长
+        String durationHuman = TimeUtil.getFormattedDuration(duration);
+
+        // 封装歌曲对象
+        Track track = Track.builder()
+                .author(author)
+                .title(title)
+                .album(album)
+                .cover("https://y.qq.com/music/photo_new/T002R500x500M000" + albumMid + "_1.jpg")
+                .duration(duration)
+                .durationHuman(durationHuman)
+                .url("https://music.youtube.com/watch?v=dQw4w9WgXcQ")
+                .id(id)
+                .isVideo(false)
+                .isAdvertisement(false)
+                .inLibrary(false)
+                .build();
+
+        log.info("获取成功");
+
+        // 更新缓存 (加锁写入)
+        synchronized (cacheLock) {
+            this.prevKeyword = keyword;
+            this.prevTrack = track;
+        }
+
+        return track;
+    }
+
+    /**
+     * 根据关键词搜索歌曲，返回歌曲信息对象（使用旧搜索接口作为兜底，速度比新接口慢 200ms）
+     * @param keyword 关键词
+     * @return
+     */
+    public Track searchAlternative(String keyword) throws Exception {
         // 构建请求参数
         Map<String, String> params = new HashMap<>();
         params.put("ct", "24");

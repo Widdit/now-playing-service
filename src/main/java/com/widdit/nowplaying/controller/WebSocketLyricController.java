@@ -93,13 +93,7 @@ public class WebSocketLyricController {
     public static void sendToAllClients(WebSocketMessage message) {
         String jsonMessage = JSON.toJSONString(message);
         for (Session session : nowPlayingSessions) {
-            try {
-                if (session.isOpen()) {
-                    session.getBasicRemote().sendText(jsonMessage);
-                }
-            } catch (IOException e) {
-                log.warn("发送 WebSocket 消息失败：{}", e.getMessage());
-            }
+            sendTextSafe(session, jsonMessage);
         }
     }
 
@@ -107,12 +101,27 @@ public class WebSocketLyricController {
      * 向指定 Session 发送消息
      */
     public static void sendToSession(Session session, WebSocketMessage message) {
+        if (session != null) {
+            sendTextSafe(session, JSON.toJSONString(message));
+        }
+    }
+
+    /**
+     * 安全地向 Session 发送文本消息。
+     * 同一 Session 上的并发 sendText 会被 Tomcat 拒绝并抛出 IllegalStateException (TEXT_FULL_WRITING)，
+     * 因此必须按 Session 加锁；且任何发送异常都不能向上传播，
+     * 否则会沿事件调用链杀死 C# 输出读取线程，导致歌曲状态永久冻结。
+     */
+    private static void sendTextSafe(Session session, String jsonMessage) {
         try {
             if (session != null && session.isOpen()) {
-                String jsonMessage = JSON.toJSONString(message);
-                session.getBasicRemote().sendText(jsonMessage);
+                synchronized (session) {
+                    if (session.isOpen()) {
+                        session.getBasicRemote().sendText(jsonMessage);
+                    }
+                }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.warn("发送 WebSocket 消息失败：{}", e.getMessage());
         }
     }
