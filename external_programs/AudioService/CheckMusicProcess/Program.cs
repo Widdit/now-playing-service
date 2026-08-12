@@ -30,6 +30,7 @@ namespace ProcessChecker
             { "yesplay", "YesPlayMusic" },
             { "cider", "Cider" },
             { "wesing", "WeSing" },
+            { "saltplayer", "Salt Player for Windows" }
             // 浏览器平台可能使用多种浏览器，用 "|" 分隔多个进程名，任一存在即视为运行中
             { "browser", "chrome|msedge|firefox" }
         };
