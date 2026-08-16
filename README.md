@@ -143,4 +143,4 @@ QQ 交流群：150453391
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Widdit/now-playing-service&type=date&legend=top-left)](https://www.star-history.com/#Widdit/now-playing-service&type=date&legend=top-left)
+[![Star History Chart](https://star-history.dera.page/svg?repos=Widdit/now-playing-service&type=date&legend=top-left)](https://star-history.dera.page/#Widdit/now-playing-service&type=date&legend=top-left)
