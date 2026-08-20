@@ -316,6 +316,7 @@ public class NowPlayingService {
         otherPlatforms.put("yesplay", "YesPlayMusic");
         otherPlatforms.put("cider", "Cider");
         otherPlatforms.put("browser", "浏览器");
+        otherPlatforms.put("salt", "Salt Player");
     }
 
     /**
