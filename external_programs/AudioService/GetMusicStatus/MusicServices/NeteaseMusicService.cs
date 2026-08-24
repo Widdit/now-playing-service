@@ -11,6 +11,7 @@ public class NeteaseMusicService : MusicService
     // 用于"音量为 0 时通过进度变化判断播放/暂停"的兜底
     private int _lastProgressSeconds = -1;
     private DateTime _lastProgressChangeTime = DateTime.MinValue;
+    private string _progressTrackTitle = null;
 
     public override string GetMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -107,15 +108,19 @@ public class NeteaseMusicService : MusicService
 
         windowTitle = FixTitleNetease(windowTitle);
 
-        // 通过 UI Automation 读取进度（失败时保持 -1，不输出 Progress 行）
+        // 切歌首轮只上报标题，不触发 UIA。进度 UIA 在独立 worker 中延后一轮执行；
+        // 此处始终只读取内存缓存，低性能设备上的 UIA 长尾不会阻塞歌曲跳转。
         int currentSec = -1;
         int totalSec = -1;
-        try
+        bool trackChanged = !string.Equals(_progressTrackTitle, windowTitle, StringComparison.Ordinal);
+        if (trackChanged)
         {
-            NeteaseMusicHelper.ReadProgressViaUIA(out currentSec, out totalSec);
+            _progressTrackTitle = windowTitle;
+            NeteaseMusicHelper.SetTrack(windowTitle);
         }
-        catch (Exception)
+        else
         {
+            NeteaseMusicHelper.TryGetCachedProgress(out currentSec, out totalSec);
         }
 
         // 判断播放状态：
@@ -165,6 +170,8 @@ public class NeteaseMusicService : MusicService
         }
 
         _lastGoodOutput = null;
+        _progressTrackTitle = null;
+        NeteaseMusicHelper.SetTrack(null);
         return "None";
     }
 
