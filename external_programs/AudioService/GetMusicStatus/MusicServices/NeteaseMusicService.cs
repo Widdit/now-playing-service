@@ -11,6 +11,8 @@ public class NeteaseMusicService : MusicService
     // 用于"音量为 0 时通过进度变化判断播放/暂停"的兜底
     private int _lastProgressSeconds = -1;
     private DateTime _lastProgressChangeTime = DateTime.MinValue;
+    private long _seedPlaytimeMilliseconds = -1;
+    private DateTime _seedProgressUntil = DateTime.MinValue;
 
     public override string GetMusicStatus(AudioSessionManager2 sessionManager)
     {
@@ -107,16 +109,10 @@ public class NeteaseMusicService : MusicService
 
         windowTitle = FixTitleNetease(windowTitle);
 
-        // 通过 UI Automation 读取进度（失败时保持 -1，不输出 Progress 行）
+        // 本机测试的网易云 3.1.38 未暴露可用的 UI Automation 文本树。
+        // 原实现会在这里同步扫描整棵 UIA 树，切歌快通道因而可能被阻塞数秒。
         int currentSec = -1;
         int totalSec = -1;
-        try
-        {
-            NeteaseMusicHelper.ReadProgressViaUIA(out currentSec, out totalSec);
-        }
-        catch (Exception)
-        {
-        }
 
         // 判断播放状态：
         // 优先用音量（反映是否真的在出声）；若音量为 0 但进度最近有变化，则仍视为 Playing
@@ -130,6 +126,29 @@ public class NeteaseMusicService : MusicService
         else
         {
             status = IsProgressChangingRecently(currentSec) ? "Playing" : "Paused";
+        }
+
+        // 改为读取网易云自身 historyTracks 的开播时间。新开播后的前 3 秒会
+        // 重复校准，消除 Java 端处理 Track/歌词事件造成的首个 Progress 排队延迟；
+        // 之后仍由 Now Playing 原有计时器负责推进与暂停。
+        if ("Playing".Equals(status)
+            && NeteaseHistoryReader.TryGetInitialProgress(
+                windowTitle,
+                out int seededCurrentSec,
+                out int seededTotalSec,
+                out long playtimeMilliseconds))
+        {
+            if (playtimeMilliseconds != _seedPlaytimeMilliseconds)
+            {
+                _seedPlaytimeMilliseconds = playtimeMilliseconds;
+                _seedProgressUntil = DateTime.Now.AddSeconds(3);
+            }
+
+            if (DateTime.Now <= _seedProgressUntil)
+            {
+                currentSec = seededCurrentSec;
+                totalSec = seededTotalSec;
+            }
         }
 
         // 输出结果
@@ -206,3 +225,4 @@ public class NeteaseMusicService : MusicService
         return (DateTime.Now - _lastProgressChangeTime).TotalMilliseconds <= 1500;
     }
 }
+
