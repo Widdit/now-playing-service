@@ -97,7 +97,7 @@ public class QQMusicService {
         // 检查响应数据的 req_1 的 code
         JSONObject req1Resp = jsonObject.getJSONObject("req_1");
         if (req1Resp == null || req1Resp.getIntValue("code") != 0) {
-            log.warn("新搜索接口响应错误，将在未来 10 分钟内使用旧接口兜底。响应内容：" + respStr);
+            log.warn("QQ 音乐新搜索接口响应错误，将在未来 10 分钟内使用旧接口兜底。响应内容：" + respStr);
             newApiFailTimestamp = System.currentTimeMillis();
             return searchAlternative(keyword);
         }
