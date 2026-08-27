@@ -172,6 +172,12 @@ public class LyricService {
             log.info("全民 K 歌本地无歌词，退化为在线获取");
         }
 
+        // 如果当前平台为浏览器，直接返回空歌词
+        if ("browser".equals(audioService.getCurrentPlatform())) {
+            log.info("当前平台为浏览器，跳过在线歌词获取");
+            return createEmptyLyric(windowTitle, source);
+        }
+
         if (autoSelectBestLyric) {
             // 智能匹配最佳歌词
             newLyric = selectBestLyric(source, windowTitle);

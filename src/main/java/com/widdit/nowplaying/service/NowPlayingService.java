@@ -163,6 +163,9 @@ public class NowPlayingService {
                     searchedTrack = kuWoMusicService.search(windowTitle);
                 } else if ("wesing".equals(platform)) {
                     searchedTrack = qqMusicService.search(windowTitle);
+                } else if ("browser".equals(platform)) {
+                    log.info("当前平台为：浏览器，跳过在线歌曲搜索");
+                    searchedTrack = new Track();
                 } else {
                     log.info("当前平台为：" + otherPlatforms.get(platform) + "，借用网易云音乐搜索");
                     searchedTrack = neteaseMusicService.search(windowTitle);
