@@ -31,7 +31,8 @@ namespace ProcessChecker
             { "cider", "Cider" },
             { "wesing", "WeSing" },
             // 浏览器平台可能使用多种浏览器，用 "|" 分隔多个进程名，任一存在即视为运行中
-            { "browser", "chrome|msedge|firefox" }
+            { "browser", "chrome|msedge|firefox" },
+            { "salt", "Salt Player for Windows" }
         };
 
         static void Main(string platform = "netease")

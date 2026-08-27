@@ -24,7 +24,9 @@ public static class Helper
         { "miebo", new[] { "咩播", "miebo" } },
         { "yesplay", new[] { "yesplaymusic" } },
         { "cider", new[] { "msedgewebview2" } },
-        { "wesing", new[] { "wesing" } }
+        { "wesing", new[] { "wesing" } },
+        { "browser", new[] { "chrome", "msedge", "firefox" } },
+        { "salt", new[] { "salt player for windows" } }
     };
 
     public static bool IsMusicProcess(string processName, string platform)

@@ -128,6 +128,7 @@ public class AynaLivePlayerService : MusicService
                             title = info["Title"].ToString();
                             artist = info["Artist"].ToString();
                             artist = artist.Replace(",", " / ");
+                            artist = artist.Replace("、", " / ");
 
                             string coverUrl = info["Cover"]["Url"].ToString();
                             SaveThumbnail(coverUrl);
@@ -140,6 +141,7 @@ public class AynaLivePlayerService : MusicService
                             title = info["title"].ToString();
                             artist = info["artist"].ToString();
                             artist = artist.Replace(",", " / ");
+                            artist = artist.Replace("、", " / ");
 
                             string coverUrl = info["cover"]["url"].ToString();
                             SaveThumbnail(coverUrl);

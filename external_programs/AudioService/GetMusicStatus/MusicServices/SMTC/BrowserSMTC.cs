@@ -62,7 +62,15 @@ public class BrowserSMTC : MusicService
             prevArtist = artist;
 
             string status = isPlaying ? "Playing" : "Paused";
-            string result = $"{status}\r\n{title + " - " + artist}";
+            string result;
+            if (string.IsNullOrEmpty(artist))
+            {
+                result = $"{status}\r\n{title}";
+            }
+            else
+            {
+                result = $"{status}\r\n{title} - {artist}";
+            }
 
             // 通过 SMTC 时间线输出精确进度（需要网页定期调用 setPositionState）
             try

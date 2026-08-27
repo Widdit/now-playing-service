@@ -16,6 +16,22 @@ class Program
 
         try
         {
+            // SPW 检测主要通过 SMTC，不依赖音频会话；部分设备上其音频会话也不会暴露有效 PeakValue。因此进程存在时直接选用默认设备
+            // https://github.com/Widdit/now-playing-service/pull/51
+            if ("salt".Equals(platform, StringComparison.OrdinalIgnoreCase)
+                && Process.GetProcessesByName("Salt Player for Windows").Length > 0)
+            {
+                Console.WriteLine("default");
+                return;
+            }
+
+            // 浏览器检测主要通过 SMTC，不依赖音频会话，因此直接选用默认设备
+            if ("browser".Equals(platform, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("default");
+                return;
+            }
+
             GetDefaultAudioSessionManager2(DataFlow.Render);
 
             List<AudioSessionManager2> sessionManagers = GetAllAudioSessionManager2(DataFlow.Render);
