@@ -60,8 +60,8 @@ public class AppInfo {
     // 全民 K 歌缓存目录
     private String weSingCachePath = "";
 
-    // 全民 K 歌缓存目录是否存在
-    private Boolean weSingCachePathExist = true;
+    // 全民 K 歌缓存目录有效性
+    private String checkWeSingCachePath = "";
 
     // ============= 歌词设置 =============
 

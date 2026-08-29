@@ -110,6 +110,12 @@ public class SystemService {
         // 歌词设置
         SettingsLyricCommon settingsLyricCommon = lyricService.getCommonSettings();
 
+        // 全民 K 歌缓存目录有效性
+        String checkWeSingCachePathMsg = checkWeSingCachePath().getData();
+        if ("".equals(checkWeSingCachePathMsg)) {
+            checkWeSingCachePathMsg = "有效";
+        }
+
         return AppInfo.builder()
                 .operatingSystem(osName)
                 .osBit(osBit.getOsBit())
@@ -126,7 +132,7 @@ public class SystemService {
                 .fallbackPlatform(settingsGeneral.getFallbackPlatform())
                 .pollInterval(settingsGeneral.getPollInterval())
                 .weSingCachePath(settingsGeneral.getWeSingCachePath())
-                .weSingCachePathExist(weSingCachePathExist().getData())
+                .checkWeSingCachePath(checkWeSingCachePathMsg)
                 .lyricSource(settingsLyricCommon.getLyricSource())
                 .autoSelectBestLyric(settingsLyricCommon.getAutoSelectBestLyric())
                 .build();
@@ -380,13 +386,21 @@ public class SystemService {
     }
 
     /**
-     * 全民 K 歌缓存目录是否存在
-     * @return
+     * 检查全民 K 歌缓存目录是否有效
+     * @return 提示信息。空字符串表示目录有效，否则返回无效提示信息
      */
-    public RespData<Boolean> weSingCachePathExist() {
+    public RespData<String> checkWeSingCachePath() {
         Path weSingCachePath = Paths.get(settingsService.getSettingsGeneral().getWeSingCachePath());
-        boolean weSingCachePathExist = Files.exists(weSingCachePath) && Files.isDirectory(weSingCachePath);
-        return new RespData<>(weSingCachePathExist);
+        if (!Files.exists(weSingCachePath) || !Files.isDirectory(weSingCachePath)) {
+            return new RespData<>("所选缓存目录不存在（请根据提示选择有效目录）");
+        }
+
+        Path weSingDLPath = weSingCachePath.resolve("WeSingDL");
+        if (!Files.exists(weSingDLPath) || !Files.isDirectory(weSingDLPath)) {
+            return new RespData<>("所选缓存目录无效（请根据提示重新选择有效目录）");
+        }
+
+        return new RespData<>("");
     }
 
     /**

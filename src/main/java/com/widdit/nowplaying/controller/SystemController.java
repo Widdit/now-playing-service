@@ -158,12 +158,12 @@ public class SystemController {
     }
 
     /**
-     * 全民 K 歌缓存目录是否存在
-     * @return
+     * 检查全民 K 歌缓存目录是否有效
+     * @return 提示信息。空字符串表示目录有效，否则返回无效提示信息
      */
-    @GetMapping("/api/system/weSingCachePathExist")
-    public RespData<Boolean> weSingCachePathExist() {
-        return systemService.weSingCachePathExist();
+    @GetMapping("/api/system/checkWeSingCachePath")
+    public RespData<String> checkWeSingCachePath() {
+        return systemService.checkWeSingCachePath();
     }
 
 }
