@@ -4,6 +4,16 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Interop.UIAutomationClient;
 
+/// <summary>
+/// 网易云音乐进度条的 UI Automation 抓取模块。
+///
+/// 设计概览：
+/// 主线程（NeteaseMusicService）只做两件事——通知曲目变化（SetTrack）、
+/// 读取最近一次抓取到的进度快照（TryGetCachedProgress），本身不直接触碰 UIA，
+/// 避免 UIA 调用的不确定耗时拖慢主轮询节奏（尤其是切歌瞬间）。
+/// 真正的 UIA 抓取工作放在独立的后台线程（ProgressWorker）中按固定间隔轮询，
+/// 两者之间通过一份带 generation 版本号的共享状态解耦，防止读到"上一首歌"的进度。
+/// </summary>
 public static class NeteaseMusicHelper
 {
     private const bool PRINT_EXCEPTION_LOG = false;
@@ -12,11 +22,10 @@ public static class NeteaseMusicHelper
     private const int UIA_ControlTypePropertyId = 30003;
     private const int UIA_TextControlTypeId = 50020;
 
-    // worker 轮询间隔（毫秒）：热路径下直接复用缓存元素，开销极低，可以轮询较快
+    // worker 轮询间隔（毫秒）
     private const int PROGRESS_POLL_INTERVAL_MS = 300;
-    // 缓存失效后重新全量扫描 UIA 树的最小间隔（毫秒），避免频繁遍历拖慢性能
-    private const int FULL_SCAN_RETRY_MS = 500;
-    // 切歌后等待 UIA 元素稳定的宽限期（毫秒）：Chromium 切歌会重建内部元素，需等待稳定
+    // 切歌后的宽限期（毫秒）：网易云基于 Chromium/Electron，切歌时内部会重建一部分 UIA 元素，
+    // 若在重建完成前就去读取进度文本，容易读到空值或上一首歌的残留内容，因此切歌后先等待片刻再开始抓取
     private const int TRACK_CHANGE_GRACE_MS = 2000;
 
     private static readonly object StateLock = new object();
@@ -29,9 +38,10 @@ public static class NeteaseMusicHelper
     private static int _totalSec = -1;
 
     /// <summary>
-    /// 通知 worker 当前曲目已切换，仅更新内存状态，不执行 UIA 操作。
-    /// worker 会等待 <see cref="TRACK_CHANGE_GRACE_MS"/> 毫秒宽限期，
-    /// 确保切歌时 UIA 元素重建完成后再开始抓取进度。
+    /// 主线程调用：通知 worker 当前曲目已切换（或播放已结束，track 传 null）。
+    /// 这里只更新共享状态并唤醒 worker，不做任何 UIA 操作，因此对主线程而言是零成本的。
+    /// generation 自增用于标记"这是一次新的曲目请求"：worker 据此判断需要等待宽限期、
+    /// 丢弃与旧曲目相关的缓存元素与结果。
     /// </summary>
     public static void SetTrack(string track)
     {
@@ -58,8 +68,9 @@ public static class NeteaseMusicHelper
     }
 
     /// <summary>
-    /// 非阻塞读取 worker 最近一次成功抓到的当前歌曲进度。
-    /// 通过 generation 版本号判断缓存结果是否属于当前曲目请求。
+    /// 主线程调用：非阻塞地读取 worker 最近一次抓取到的进度快照。
+    /// 只有当结果的 generation 与当前请求的 generation 一致时才视为有效——
+    /// 这避免了"切歌瞬间，worker 还没来得及更新，主线程读到上一首歌进度"的情况。
     /// </summary>
     public static bool TryGetCachedProgress(out int currentSec, out int totalSec)
     {
@@ -88,19 +99,28 @@ public static class NeteaseMusicHelper
     }
 
     /// <summary>
-    /// 后台 worker 主循环：维护 UIA 窗口缓存与进度元素缓存，定期轮询进度。
-    /// 采用两级缓存策略：
-    ///   热路径 —— 直接读已命中的 Text 元素的 CurrentName，避免重复遍历 UIA 树；
-    ///   冷路径 —— 缓存失效时才执行全量扫描，并限制最小扫描间隔，避免阻塞歌曲检测。
+    /// 后台 worker 主循环。
+    ///
+    /// 缓存策略：
+    /// 播放器主窗口的查找需要从桌面根节点按进程 PID 枚举子窗口，开销相对较大，
+    /// 但窗口标题由操作系统维护、更新及时，因此一旦找到就跨轮询周期缓存（cachedWindow），
+    /// 每轮只需用 IsUsablePlayerWindow 做一次轻量校验，失效了再重新查找。
+    ///
+    /// 而窗口内部的进度文本元素则不做跨轮询缓存：其可见性会随用户是否 hover 在进度条上
+    /// 而变化（不 hover 时网易云不渲染该文本），查找它的开销仅限于在单个窗口的子树内查找
+    /// Text 控件，相对于整棵桌面树的查找很轻量；同时进度是否"当前可见"这件事本身就需要
+    /// 每一轮都重新判断，因此这里选择用轻微的重复查找换取结果的实时准确性。
+    ///
+    /// 曲目切换处理：
+    /// generation 变化时说明切歌了，此时重置宽限期计时，等待 UIA 元素重建完成后再恢复抓取；
+    /// 期间窗口缓存仍然保留（顶层窗口一般不会因为切歌而销毁重建）。
     /// </summary>
     private static void ProgressWorker()
     {
         IUIAutomation automation = null;
         IUIAutomationElement cachedWindow = null;
-        IUIAutomationElement cachedProgressElement = null;
         long observedGeneration = -1;
         DateTime scanAllowedAt = DateTime.MinValue;
-        DateTime lastFullScanAt = DateTime.MinValue;
 
         try
         {
@@ -118,27 +138,20 @@ public static class NeteaseMusicHelper
 
                 if (generation != observedGeneration)
                 {
-                    // Chromium 切歌会重建内部 UIA 元素，进度元素缓存必须作废；
-                    // 顶层窗口通常在切歌时保持稳定，继续沿用窗口缓存。
-                    ReleaseComObject(cachedProgressElement);
-                    cachedProgressElement = null;
                     observedGeneration = generation;
                     scanAllowedAt = DateTime.UtcNow.AddMilliseconds(TRACK_CHANGE_GRACE_MS);
-                    lastFullScanAt = DateTime.MinValue;
                 }
 
                 if (string.IsNullOrEmpty(track))
                 {
-                    // 无曲目时释放所有缓存，进入休眠等待下一次 SetTrack 唤醒
-                    ReleaseComObject(cachedProgressElement);
-                    cachedProgressElement = null;
+                    // 没有正在播放的曲目，释放窗口缓存并挂起，等待下一次 SetTrack 唤醒
                     ReleaseComObject(cachedWindow);
                     cachedWindow = null;
                     WorkSignal.WaitOne();
                     continue;
                 }
 
-                // 切歌宽限期内不读取，等待 UIA 元素重建完成
+                // 宽限期内暂不抓取，避免读到切歌过程中尚未稳定的 UIA 元素
                 int graceRemaining = (int)Math.Ceiling((scanAllowedAt - DateTime.UtcNow).TotalMilliseconds);
                 if (graceRemaining > 0)
                 {
@@ -146,52 +159,25 @@ public static class NeteaseMusicHelper
                     continue;
                 }
 
+                if (!IsUsablePlayerWindow(cachedWindow))
+                {
+                    ReleaseComObject(cachedWindow);
+                    cachedWindow = FindNeteasePlayerWindow(automation);
+                }
+
                 int currentSec = -1;
                 int totalSec = -1;
 
-                // 热路径：直接读已命中的 Text 元素的 CurrentName，避免重复遍历 UIA 树
-                if (cachedProgressElement != null)
+                if (cachedWindow != null)
                 {
-                    try
-                    {
-                        if (!TryParseProgressText(cachedProgressElement.CurrentName, out currentSec, out totalSec))
-                        {
-                            // 元素已失效（如歌曲切换导致元素重建），清除缓存走冷路径重新扫描
-                            ReleaseComObject(cachedProgressElement);
-                            cachedProgressElement = null;
-                        }
-                    }
-                    catch
-                    {
-                        ReleaseComObject(cachedProgressElement);
-                        cachedProgressElement = null;
-                    }
+                    IUIAutomationElement progressElement =
+                        FindProgressElement(automation, cachedWindow, out currentSec, out totalSec);
+                    ReleaseComObject(progressElement);
                 }
 
-                // 冷路径：缓存失效时才执行全量扫描，同时限制最小扫描间隔避免频繁遍历拖慢性能；
-                // 长尾扫描只会阻塞本 worker，不会阻塞主线程的歌曲检测逻辑。
-                if (cachedProgressElement == null &&
-                    (DateTime.UtcNow - lastFullScanAt).TotalMilliseconds >= FULL_SCAN_RETRY_MS)
-                {
-                    lastFullScanAt = DateTime.UtcNow;
-
-                    if (!IsUsablePlayerWindow(cachedWindow))
-                    {
-                        ReleaseComObject(cachedWindow);
-                        cachedWindow = FindNeteasePlayerWindow(automation);
-                    }
-
-                    if (cachedWindow != null)
-                    {
-                        cachedProgressElement = FindProgressElement(
-                            automation, cachedWindow, out currentSec, out totalSec);
-                    }
-                }
-
-                if (currentSec >= 0 && totalSec > 0)
-                {
-                    PublishProgress(generation, currentSec, totalSec);
-                }
+                // 无论本轮是否找到进度文本都发布结果：找不到（如用户未 hover 进度条）就发布 -1/-1，
+                // 让主线程能感知"当前没有可显示的进度"，而不是一直沿用上一轮的旧快照
+                PublishProgress(generation, currentSec, totalSec);
 
                 WorkSignal.WaitOne(PROGRESS_POLL_INTERVAL_MS);
             }
@@ -205,15 +191,15 @@ public static class NeteaseMusicHelper
         }
         finally
         {
-            ReleaseComObject(cachedProgressElement);
             ReleaseComObject(cachedWindow);
             ReleaseComObject(automation);
         }
     }
 
     /// <summary>
-    /// 将本次读取结果写入共享状态。
-    /// 写入前再次校验 generation，防止 worker 在读取期间发生曲目切换时污染新曲目的进度缓存。
+    /// 将本轮抓取结果写入共享状态，供主线程读取。
+    /// 写入前再校验一次 generation：如果在本轮抓取耗时期间曲目已经又发生了切换，
+    /// 这份结果就已经过期，直接丢弃，避免污染新曲目的进度缓存。
     /// </summary>
     private static void PublishProgress(long generation, int currentSec, int totalSec)
     {
@@ -338,9 +324,10 @@ public static class NeteaseMusicHelper
     }
 
     /// <summary>
-    /// 通过 UI Automation 在窗口 UIA 子树内搜索所有 Text 控件，
-    /// 优先匹配形如 "MM:SS / MM:SS" 或 "MM:SS | MM:SS" 的单个文本元素，解析进度。
-    /// 命中后返回该元素供 worker 跨 tick 缓存（热路径复用，避免重复遍历 UIA 树）。
+    /// 在指定窗口的 UIA 子树内查找所有 Text 控件，逐个尝试解析成
+    /// "MM:SS / MM:SS" 或 "MM:SS | MM:SS" 形式的进度文本，命中即返回。
+    /// 查找范围限定在单个窗口子树内，开销较小，因此每轮都重新执行，
+    /// 不做跨轮询缓存，以保证能及时反映"进度文本当前是否可见"这一状态。
     /// </summary>
     private static IUIAutomationElement FindProgressElement(
         IUIAutomation automation, IUIAutomationElement root, out int currentSec, out int totalSec)
