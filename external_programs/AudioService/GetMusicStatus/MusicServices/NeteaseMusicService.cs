@@ -18,6 +18,7 @@ public class NeteaseMusicService : MusicService
         double volume = 0;
         bool musicAppRunning = false;
         string windowTitle = "";
+        IntPtr mainWindowHandle = IntPtr.Zero;
 
         AudioSessionEnumerator sessionEnumerator = null;
 
@@ -48,7 +49,13 @@ public class NeteaseMusicService : MusicService
                     musicAppRunning = true;
                     meter = session.QueryInterface<AudioMeterInformation>();
                     volume += meter.PeakValue;
-                    windowTitle = WindowDetector.GetWindowTitleByHandle(sessionControl.Process.MainWindowHandle);
+                    IntPtr hwnd = sessionControl.Process.MainWindowHandle;
+                    windowTitle = WindowDetector.GetWindowTitleByHandle(hwnd);
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        // 记录主窗口句柄（进度条所在窗口），供 UIA 精确定位
+                        mainWindowHandle = hwnd;
+                    }
                 }
 
                 // 释放对象
@@ -107,6 +114,10 @@ public class NeteaseMusicService : MusicService
         }
 
         windowTitle = FixTitleNetease(windowTitle);
+
+        // 每次轮询都把最新的主窗口句柄同步给 UIA worker，
+        // 用于 ElementFromHandle 精确定位主窗口，避免桌面歌词等其它窗口被误选。
+        NeteaseMusicHelper.SetWindowHandle(mainWindowHandle);
 
         // 通过 UI Automation 读取进度（失败时保持 -1，不输出 Progress 行）
         // 切歌首轮只上报标题，不触发 UIA。进度 UIA 在独立 worker 中延后一轮执行；
