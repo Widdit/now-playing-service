@@ -113,6 +113,15 @@ public class NeteaseMusicService : MusicService
             return ApplyHoldover("None");
         }
 
+        // 用 Win32 标题"歌名 - 歌手"定位真正的主窗口（网易云会把主窗口标题改成歌曲名），
+        // 并屏蔽桌面歌词窗口/迷你播放器/SMTC 窗口。MainWindowHandle 在开启桌面歌词时会错指到
+        // "桌面歌词"窗口，因此这里统一重新定位，确保 UIA 读的是主窗口的进度条。
+        IntPtr playerHwnd = WindowDetector.GetPlayerWindowHandle("cloudmusic");
+        if (playerHwnd != IntPtr.Zero)
+        {
+            mainWindowHandle = playerHwnd;
+        }
+
         windowTitle = FixTitleNetease(windowTitle);
 
         // 每次轮询都把最新的主窗口句柄同步给 UIA worker，
