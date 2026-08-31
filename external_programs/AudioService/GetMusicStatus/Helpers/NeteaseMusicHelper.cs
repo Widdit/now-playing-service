@@ -37,6 +37,10 @@ public static class NeteaseMusicHelper
     private static int _currentSec = -1;
     private static int _totalSec = -1;
 
+    // 播放器主窗口句柄（主线程每轮轮询更新）。用于 ElementFromHandle 精确定位主窗口，
+    // 进度条一定在主窗口里，从而避免桌面歌词等其它 cloudmusic 窗口被误选、导致读不到进度。
+    private static IntPtr _playerWindowHandle = IntPtr.Zero;
+
     /// <summary>
     /// 主线程调用：通知 worker 当前曲目已切换（或播放已结束，track 传 null）。
     /// 这里只更新共享状态并唤醒 worker，不做任何 UIA 操作，因此对主线程而言是零成本的。
@@ -62,6 +66,24 @@ public static class NeteaseMusicHelper
             {
                 EnsureWorkerStarted();
             }
+        }
+
+        WorkSignal.Set();
+    }
+
+    /// <summary>
+    /// 主线程调用：更新播放器主窗口句柄（由音频会话的 MainWindowHandle 得到）。
+    /// 句柄变化时唤醒 worker，让其在下一轮通过 ElementFromHandle 重新定位主窗口。
+    /// </summary>
+    public static void SetWindowHandle(IntPtr hwnd)
+    {
+        lock (StateLock)
+        {
+            if (_playerWindowHandle == hwnd)
+            {
+                return;
+            }
+            _playerWindowHandle = hwnd;
         }
 
         WorkSignal.Set();
@@ -159,20 +181,56 @@ public static class NeteaseMusicHelper
                     continue;
                 }
 
-                if (!IsUsablePlayerWindow(cachedWindow))
+                // 本轮要扫描的窗口：优先用主窗口句柄精确定位（ElementFromHandle）。
+                // 进度条一定在主窗口里，用它可避免桌面歌词等其它 cloudmusic 窗口被误选。
+                IUIAutomationElement scanWindow = null;
+                bool scanWindowIsTemp = false;
+
+                IntPtr hwnd;
+                lock (StateLock)
                 {
-                    ReleaseComObject(cachedWindow);
-                    cachedWindow = FindNeteasePlayerWindow(automation);
+                    hwnd = _playerWindowHandle;
+                }
+
+                if (hwnd != IntPtr.Zero)
+                {
+                    try
+                    {
+                        scanWindow = automation.ElementFromHandle(hwnd);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (scanWindow == null)
+                {
+                    // 回退：无可用句柄时，沿用缓存窗口 + PID 枚举
+                    if (!IsUsablePlayerWindow(cachedWindow))
+                    {
+                        ReleaseComObject(cachedWindow);
+                        cachedWindow = FindNeteasePlayerWindow(automation);
+                    }
+                    scanWindow = cachedWindow;
+                }
+                else
+                {
+                    scanWindowIsTemp = true;
                 }
 
                 int currentSec = -1;
                 int totalSec = -1;
 
-                if (cachedWindow != null)
+                if (scanWindow != null)
                 {
                     IUIAutomationElement progressElement =
-                        FindProgressElement(automation, cachedWindow, out currentSec, out totalSec);
+                        FindProgressElement(automation, scanWindow, out currentSec, out totalSec);
                     ReleaseComObject(progressElement);
+                }
+
+                if (scanWindowIsTemp)
+                {
+                    ReleaseComObject(scanWindow);
                 }
 
                 // 无论本轮是否找到进度文本都发布结果：找不到（如用户未 hover 进度条）就发布 -1/-1，
