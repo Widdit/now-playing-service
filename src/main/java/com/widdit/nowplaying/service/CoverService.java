@@ -36,16 +36,6 @@ public class CoverService {
     /** 是否应该读取本地图片 */
     private boolean shouldReadLocalImage;
 
-    // ==================== convertToBase64 缓存相关 ====================
-    /** 上一次的封面 URL */
-    private String prevCoverUrl = null;
-    /** 缓存的 Base64 图片结果 */
-    private Base64Img cachedBase64Img = null;
-    /** 是否已缓存（用于区分"未缓存"和"缓存了 null"） */
-    private boolean base64ImgCached = false;
-    /** convertToBase64 方法的锁对象 */
-    private final Object convertToBase64Lock = new Object();
-
     // ==================== getVideoUrl 缓存相关 ====================
     /** 上一次的歌曲标题 */
     private String prevSongTitle = null;
@@ -64,77 +54,6 @@ public class CoverService {
      * @return Base64Img 对象
      */
     public Base64Img convertToBase64(String coverUrl) {
-        synchronized (convertToBase64Lock) {
-            // 检查缓存：如果 coverUrl 与上一次相同，直接返回缓存结果
-            if (base64ImgCached && Objects.equals(coverUrl, prevCoverUrl)) {
-                return cachedBase64Img;
-            }
-
-            // 缓存未命中，执行实际的转换逻辑
-            Base64Img result = doConvertToBase64(coverUrl);
-
-            // 更新缓存
-            prevCoverUrl = coverUrl;
-            cachedBase64Img = result;
-            base64ImgCached = true;
-
-            return result;
-        }
-    }
-
-    /**
-     * 根据歌曲信息获得动态封面的 URL
-     * @param songTitle 歌曲标题
-     * @param songAuthor 歌手名
-     * @return 动态封面的 URL，如果没有找到则返回 null
-     */
-    public String getVideoUrl(String songTitle, String songAuthor) {
-        synchronized (getVideoUrlLock) {
-            // 检查缓存：如果 songTitle 和 songAuthor 都与上一次相同，直接返回缓存结果
-            if (videoUrlCached
-                    && Objects.equals(songTitle, prevSongTitle)
-                    && Objects.equals(songAuthor, prevSongAuthor)) {
-                return cachedVideoUrl;
-            }
-
-            // 缓存未命中，执行实际的获取逻辑
-            String result = doGetVideoUrl(songTitle, songAuthor);
-
-            // 更新缓存
-            prevSongTitle = songTitle;
-            prevSongAuthor = songAuthor;
-            cachedVideoUrl = result;
-            videoUrlCached = true;
-
-            return result;
-        }
-    }
-
-    /**
-     * 初始化操作。该方法会在该类实例被 Spring 创建时自动执行
-     */
-    @PostConstruct
-    public void init() {
-        SettingsGeneral settings = settingsService.getSettingsGeneral();
-        shouldReadLocalImage = checkShouldReadLocalImage(settings);
-    }
-
-    /**
-     * 监听通用设置被修改的事件
-     * @param event
-     */
-    @EventListener
-    public void handleSettingsGeneralChange(SettingsGeneralChangedEvent event) {
-        SettingsGeneral settings = settingsService.getSettingsGeneral();
-        shouldReadLocalImage = checkShouldReadLocalImage(settings);
-    }
-
-    /**
-     * 实际执行封面转 Base64 的逻辑
-     * @param coverUrl
-     * @return
-     */
-    private Base64Img doConvertToBase64(String coverUrl) {
         InputStream inputStream = null;
         ByteArrayOutputStream outputStream = null;
         Base64Img base64Img = null;
@@ -147,7 +66,7 @@ public class CoverService {
                 Path coverPath = Paths.get(filePath);
                 Path lockFilePath = Paths.get(lockPath);
 
-                int maxRetries = 40;
+                int maxRetries = 30;
                 int retryCount = 0;
 
                 // 如果锁文件存在，则等待 100 毫秒后重试（防止读到旧封面）
@@ -217,6 +136,53 @@ public class CoverService {
         }
 
         return base64Img;
+    }
+
+    /**
+     * 根据歌曲信息获得动态封面的 URL
+     * @param songTitle 歌曲标题
+     * @param songAuthor 歌手名
+     * @return 动态封面的 URL，如果没有找到则返回 null
+     */
+    public String getVideoUrl(String songTitle, String songAuthor) {
+        synchronized (getVideoUrlLock) {
+            // 检查缓存：如果 songTitle 和 songAuthor 都与上一次相同，直接返回缓存结果
+            if (videoUrlCached
+                    && Objects.equals(songTitle, prevSongTitle)
+                    && Objects.equals(songAuthor, prevSongAuthor)) {
+                return cachedVideoUrl;
+            }
+
+            // 缓存未命中，执行实际的获取逻辑
+            String result = doGetVideoUrl(songTitle, songAuthor);
+
+            // 更新缓存
+            prevSongTitle = songTitle;
+            prevSongAuthor = songAuthor;
+            cachedVideoUrl = result;
+            videoUrlCached = true;
+
+            return result;
+        }
+    }
+
+    /**
+     * 初始化操作。该方法会在该类实例被 Spring 创建时自动执行
+     */
+    @PostConstruct
+    public void init() {
+        SettingsGeneral settings = settingsService.getSettingsGeneral();
+        shouldReadLocalImage = checkShouldReadLocalImage(settings);
+    }
+
+    /**
+     * 监听通用设置被修改的事件
+     * @param event
+     */
+    @EventListener
+    public void handleSettingsGeneralChange(SettingsGeneralChangedEvent event) {
+        SettingsGeneral settings = settingsService.getSettingsGeneral();
+        shouldReadLocalImage = checkShouldReadLocalImage(settings);
     }
 
     /**
@@ -342,6 +308,7 @@ public class CoverService {
             case "miebo":
             case "yesplay":
             case "browser":
+            case "salt":
                 return true;
 
             case "qq":
