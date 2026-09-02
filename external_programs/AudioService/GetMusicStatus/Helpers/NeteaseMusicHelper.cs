@@ -101,6 +101,8 @@ public static class NeteaseMusicHelper
         long observedGeneration = -1;
         DateTime scanAllowedAt = DateTime.MinValue;
         DateTime lastFullScanAt = DateTime.MinValue;
+        int lastObservedCurrentSec = -1;
+        bool hasObservedProgress = false;
 
         try
         {
@@ -125,6 +127,8 @@ public static class NeteaseMusicHelper
                     observedGeneration = generation;
                     scanAllowedAt = DateTime.UtcNow.AddMilliseconds(TRACK_CHANGE_GRACE_MS);
                     lastFullScanAt = DateTime.MinValue;
+                    lastObservedCurrentSec = -1;
+                    hasObservedProgress = false;
                 }
 
                 if (string.IsNullOrEmpty(track))
@@ -134,6 +138,8 @@ public static class NeteaseMusicHelper
                     cachedProgressElement = null;
                     ReleaseComObject(cachedWindow);
                     cachedWindow = null;
+                    lastObservedCurrentSec = -1;
+                    hasObservedProgress = false;
                     WorkSignal.WaitOne();
                     continue;
                 }
@@ -190,7 +196,26 @@ public static class NeteaseMusicHelper
 
                 if (currentSec >= 0 && totalSec > 0)
                 {
-                    PublishProgress(generation, currentSec, totalSec);
+                    bool progressChanged = !hasObservedProgress || currentSec != lastObservedCurrentSec;
+
+                    lastObservedCurrentSec = currentSec;
+                    hasObservedProgress = true;
+
+                    if (progressChanged)
+                    {
+                        PublishProgress(generation, currentSec, totalSec);
+                    }
+                    else
+                    {
+                        // UIA 缓存元素在鼠标移出进度条后，可能仍会返回上一次的历史时间。
+                        // 如果已播放时间没有变化，则认为当前没有新的进度信息，不再继续输出历史值。
+                        ClearPublishedProgress(generation);
+                    }
+                }
+                else
+                {
+                    // 当前无法解析出有效进度时，不继续保留上一份可输出的进度缓存。
+                    ClearPublishedProgress(generation);
                 }
 
                 WorkSignal.WaitOne(PROGRESS_POLL_INTERVAL_MS);
@@ -227,6 +252,25 @@ public static class NeteaseMusicHelper
             _currentSec = currentSec;
             _totalSec = totalSec;
             _resultGeneration = generation;
+        }
+    }
+
+    /// <summary>
+    /// 清除当前可输出的进度缓存，但保留 worker 内部记录的上一次进度，
+    /// 避免 UIA 在鼠标移出进度条后持续返回历史值时重复输出相同进度。
+    /// </summary>
+    private static void ClearPublishedProgress(long generation)
+    {
+        lock (StateLock)
+        {
+            if (generation != _requestedGeneration || string.IsNullOrEmpty(_requestedTrack))
+            {
+                return;
+            }
+
+            _currentSec = -1;
+            _totalSec = -1;
+            _resultGeneration = -1;
         }
     }
 
