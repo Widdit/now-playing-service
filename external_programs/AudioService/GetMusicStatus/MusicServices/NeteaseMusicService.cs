@@ -18,7 +18,6 @@ public class NeteaseMusicService : MusicService
         double volume = 0;
         bool musicAppRunning = false;
         string windowTitle = "";
-        IntPtr mainWindowHandle = IntPtr.Zero;
 
         AudioSessionEnumerator sessionEnumerator = null;
 
@@ -49,13 +48,7 @@ public class NeteaseMusicService : MusicService
                     musicAppRunning = true;
                     meter = session.QueryInterface<AudioMeterInformation>();
                     volume += meter.PeakValue;
-                    IntPtr hwnd = sessionControl.Process.MainWindowHandle;
-                    windowTitle = WindowDetector.GetWindowTitleByHandle(hwnd);
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        // 记录主窗口句柄（进度条所在窗口），供 UIA 精确定位
-                        mainWindowHandle = hwnd;
-                    }
+                    windowTitle = WindowDetector.GetWindowTitleByHandle(sessionControl.Process.MainWindowHandle);
                 }
 
                 // 释放对象
@@ -113,20 +106,7 @@ public class NeteaseMusicService : MusicService
             return ApplyHoldover("None");
         }
 
-        // 用 Win32 标题"歌名 - 歌手"定位真正的主窗口（网易云会把主窗口标题改成歌曲名），
-        // 并屏蔽桌面歌词窗口/迷你播放器/SMTC 窗口。MainWindowHandle 在开启桌面歌词时会错指到
-        // "桌面歌词"窗口，因此这里统一重新定位，确保 UIA 读的是主窗口的进度条。
-        IntPtr playerHwnd = WindowDetector.GetPlayerWindowHandle("cloudmusic");
-        if (playerHwnd != IntPtr.Zero)
-        {
-            mainWindowHandle = playerHwnd;
-        }
-
         windowTitle = FixTitleNetease(windowTitle);
-
-        // 每次轮询都把最新的主窗口句柄同步给 UIA worker，
-        // 用于 ElementFromHandle 精确定位主窗口，避免桌面歌词等其它窗口被误选。
-        NeteaseMusicHelper.SetWindowHandle(mainWindowHandle);
 
         // 通过 UI Automation 读取进度（失败时保持 -1，不输出 Progress 行）
         // 切歌首轮只上报标题，不触发 UIA。进度 UIA 在独立 worker 中延后一轮执行；

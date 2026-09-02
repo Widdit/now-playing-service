@@ -105,43 +105,4 @@ public class WindowDetector
 
         return windowTitles;
     }
-
-    /// <summary>
-    /// 获取网易云主窗口句柄：枚举所有 cloudmusic 进程的可见顶层窗口，
-    /// 返回标题形如"歌名 - 歌手"（网易云会把主窗口标题改成歌曲名）的窗口句柄。
-    /// 显式屏蔽：桌面歌词窗口（标题含"歌词"）、迷你播放器（标题含"迷你"）、SMTC 窗口（标题含"MediaPlayer"）。
-    /// </summary>
-    public static IntPtr GetPlayerWindowHandle(string processName)
-    {
-        IntPtr result = IntPtr.Zero;
-
-        Process[] processes = Process.GetProcessesByName(processName);
-        if (processes.Length == 0) return IntPtr.Zero;
-
-        HashSet<uint> pids = new HashSet<uint>();
-        foreach (Process p in processes)
-        {
-            pids.Add((uint)p.Id);
-            p.Dispose();
-        }
-
-        EnumWindows(new EnumWindowsProc((hWnd, lParam) =>
-        {
-            GetWindowThreadProcessId(hWnd, out uint pid);
-            if (!pids.Contains(pid)) return true;
-            if (!IsWindowVisible(hWnd)) return true;
-
-            string title = GetWindowTitleByHandle(hWnd);
-            if (string.IsNullOrEmpty(title)) return true;
-            if (title.Contains("MediaPlayer")) return true;   // SMTC 窗口
-            if (title.Contains("歌词")) return true;          // 桌面歌词窗口
-            if (title.Contains("迷你")) return true;          // 迷你播放器
-            if (!title.Contains(" - ")) return true;          // 主窗口标题形如"歌名 - 歌手"
-
-            result = hWnd;
-            return false;  // 已找到主窗口，停止枚举
-        }), IntPtr.Zero);
-
-        return result;
-    }
 }
