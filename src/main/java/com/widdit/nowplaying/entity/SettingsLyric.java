@@ -81,6 +81,10 @@ public class SettingsLyric {
 
     private Boolean hideOnPause = false;
 
+    private Integer topFadeRange = 10;
+
+    private Integer bottomFadeRange = 10;
+
     private Double opacity = 1.0;
 
     private Double brightness = 1.0;
