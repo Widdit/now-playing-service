@@ -53,10 +53,24 @@ public class LxMusicSMTC : MusicService
                 artist = songInfo.Artist;
                 artist = artist.Replace("、", " / ");
 
-                // 如果切歌，则保存封面
+                // 检测到切歌时，在后台重新拉取并校验封面，确认内容已更新后再保存。
+                // SMTC 的标题与封面由播放器异步上报，如果直接使用此刻的 songInfo.Thumbnail，
+                // 可能会拿到尚未刷新的旧封面，因此交由 UpdateThumbnailAsync 处理。
                 if (title != prevTitle || artist != prevArtist)
                 {
-                    ThumbnailHelper.SaveThumbnail(songInfo.Thumbnail);
+                    var controlSession = mediaSession.ControlSession;
+                    ThumbnailHelper.UpdateThumbnailAsync(() =>
+                    {
+                        try
+                        {
+                            var latestSongInfo = controlSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
+                            return latestSongInfo?.Thumbnail;
+                        }
+                        catch (Exception)
+                        {
+                            return null;
+                        }
+                    });
                 }
 
                 prevTitle = title;
