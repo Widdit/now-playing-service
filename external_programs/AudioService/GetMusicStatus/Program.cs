@@ -23,6 +23,18 @@ class Program
 {
     private const int HEARTBEAT_INTERVAL_MS = 1000;
 
+    // 保护 currentSessionManager 的读写锁，避免多线程访问时出现竞态问题
+    private static readonly object sessionManagerLock = new object();
+
+    // 当前正在使用的音频会话管理器。当 device-id 为 default 时，会随系统默认输出设备的变化而动态更新
+    private static AudioSessionManager2 currentSessionManager;
+
+    // 默认音频设备变更通知客户端。需保持静态引用，防止被垃圾回收
+    private static MMNotificationClient notificationClient;
+
+    // 用于创建通知客户端的设备枚举器。需在程序运行期间保持存活
+    private static MMDeviceEnumerator notificationDeviceEnumerator;
+
     static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100)
     {
         Console.OutputEncoding = Encoding.UTF8;
@@ -41,19 +53,22 @@ class Program
         parentWatchThread.IsBackground = true;
         parentWatchThread.Start();
 
-        AudioSessionManager2 sessionManager;
-
         try
         {
             if (deviceId == "default")
             {
                 // 获取默认设备的音频会话管理器
-                sessionManager = GetDefaultAudioSessionManager2(DataFlow.Render);
+                currentSessionManager = GetDefaultAudioSessionManager2(DataFlow.Render);
+
+                // 监听系统默认输出设备的变更事件，以便在用户切换设备（如扬声器切换为耳机）时，自动更新音频会话管理器
+                notificationDeviceEnumerator = new MMDeviceEnumerator();
+                notificationClient = new MMNotificationClient(notificationDeviceEnumerator);
+                notificationClient.DefaultDeviceChanged += OnDefaultDeviceChanged;
             }
             else
             {
                 // 获取指定设备的音频会话管理器
-                sessionManager = GetAudioSessionManager2(deviceId);
+                currentSessionManager = GetAudioSessionManager2(deviceId);
             }
         }
         catch (Exception)
@@ -109,7 +124,11 @@ class Program
         // 不断轮询音乐状态
         while (true)
         {
-            string currentOutput = musicService.GetMusicStatus(sessionManager);
+            string currentOutput;
+            lock (sessionManagerLock)
+            {
+                currentOutput = musicService.GetMusicStatus(currentSessionManager);
+            }
 
             // 判断状态是否改变
             bool statusChanged = currentOutput != prevOutput;
@@ -131,6 +150,45 @@ class Program
             }
 
             Thread.Sleep(pollInterval);
+        }
+    }
+
+    /*
+        默认音频设备变更事件的回调方法，运行在音频引擎的通知线程上。
+        仅关心输出设备（Render）在 Multimedia 角色下的变化，其余情况直接忽略。
+        MMDevice API 不允许在通知线程中同步调用其自身接口（如枚举设备），
+        因此这里只做过滤判断，具体的设备查询工作交由线程池异步完成。
+    */
+    static void OnDefaultDeviceChanged(object sender, DefaultDeviceChangedEventArgs e)
+    {
+        if (e.DataFlow != DataFlow.Render || e.Role != Role.Multimedia)
+        {
+            return;
+        }
+
+        ThreadPool.QueueUserWorkItem(_ => UpdateDefaultSessionManager());
+    }
+
+    /*
+        重新获取当前默认音频设备的会话管理器，并替换掉旧的会话管理器。
+        运行在线程池线程中，与音频引擎的通知线程相互独立。
+    */
+    static void UpdateDefaultSessionManager()
+    {
+        try
+        {
+            var newSessionManager = GetDefaultAudioSessionManager2(DataFlow.Render);
+
+            lock (sessionManagerLock)
+            {
+                var oldSessionManager = currentSessionManager;
+                currentSessionManager = newSessionManager;
+                oldSessionManager?.Dispose();
+            }
+        }
+        catch (Exception)
+        {
+            // 获取新的默认音频设备失败，忽略此次变化，继续使用原有的会话管理器
         }
     }
 
