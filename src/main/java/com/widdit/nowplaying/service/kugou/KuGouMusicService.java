@@ -3,6 +3,7 @@ package com.widdit.nowplaying.service.kugou;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.widdit.nowplaying.entity.Lyric;
 import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
@@ -28,6 +29,9 @@ public class KuGouMusicService {
 
     // 锁对象
     private final Object cacheLock = new Object();
+
+    // 歌曲哈希（用作歌词获取凭证）
+    private String fileHash;
 
     /**
      * 根据关键词搜索歌曲，返回歌曲信息对象
@@ -140,6 +144,9 @@ public class KuGouMusicService {
         Integer duration = bestMatchSong.getInteger("Duration");
         String cover = bestMatchSong.getString("Image").replace("/{size}", "");
 
+        // 提取 FileHash，作为获取歌词的凭证参数
+        this.fileHash = bestMatchSong.getString("FileHash");
+
         // 计算出格式化的时长
         String durationHuman = TimeUtil.getFormattedDuration(duration);
 
@@ -167,6 +174,158 @@ public class KuGouMusicService {
         }
 
         return track;
+    }
+
+    /**
+     * 从酷狗音乐获取歌词
+     * @param keyword 关键词
+     * @return
+     * @throws Exception
+     */
+    public Lyric getLyric(String keyword) throws Exception {
+        String[] parseResult = SongUtil.parseWindowTitle(keyword);
+        String realTitle = parseResult[0];
+        String realAuthor = parseResult[1];
+
+        // 1. 获取歌曲在酷狗音乐的基本信息
+        Track track = search(keyword);
+        String title = track.getTitle();
+        String author = track.getAuthor();
+        Integer duration = track.getDuration();
+
+        log.info("从酷狗音乐获取歌词..");
+
+        Lyric lyric = new Lyric();
+        lyric.setSource("kugou");
+        lyric.setTitle(title);
+        lyric.setAuthor(author);
+        lyric.setDuration(duration);
+
+        // 计算相似度，判断歌曲信息与真实信息是否匹配
+        int similarity = SongMatchingUtil.calculateSimilarity(realTitle, realAuthor, title, author);
+
+        int matchThreshold = SongMatchingUtil.EXACT_MATCH_THRESHOLD;
+        // 对于歌手名缺失的情况，可适当降低阈值标准
+        if (realAuthor == null || realAuthor.isBlank()) {
+            matchThreshold = 75;
+        }
+
+        // 如果歌曲错误，则说明酷狗音乐没有该歌曲，也就没有必要再调用 API 获取歌词了
+        if (similarity < matchThreshold) {
+            // 设置真实歌曲标题，而非错误歌曲标题
+            lyric.setTitle(realTitle);
+            lyric.setAuthor(realAuthor);
+
+            // 宁可返回空歌词，也不要返回不匹配的歌词
+            log.warn("酷狗歌词获取失败（未找到匹配歌曲）");
+            return lyric;
+        }
+
+        // 2. 搜索歌词，获取歌词 id 和 accesskey
+        String searchUrl = UriComponentsBuilder
+                .fromHttpUrl("https://lyrics.kugou.com/search")
+                .queryParam("ver", "1")
+                .queryParam("man", "yes")
+                .queryParam("client", "pc")
+                .queryParam("keyword", "")
+                .queryParam("hash", this.fileHash)
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
+
+        String searchRespStr = sendGetRequest(searchUrl);
+
+        JSONObject searchJsonObject = JSON.parseObject(searchRespStr);
+
+        if (!searchJsonObject.containsKey("errcode")) {
+            throw new RuntimeException("酷狗歌词搜索失败（hash = " + this.fileHash + "）：响应结果不包含 errcode 字段");
+        }
+        int searchErrCode = searchJsonObject.getIntValue("errcode");
+        if (searchErrCode != 200 && searchErrCode != 0) {
+            throw new RuntimeException("酷狗歌词搜索失败（hash = " + this.fileHash + "）：响应结果的 errcode 为 " + searchErrCode);
+        }
+
+        JSONArray candidates = searchJsonObject.getJSONArray("candidates");
+        if (candidates == null || candidates.isEmpty()) {
+            log.info("酷狗歌词获取成功（匹配度：{}%，该歌曲无歌词）", similarity);
+            return lyric;
+        }
+
+        JSONObject firstCandidate = candidates.getJSONObject(0);
+        String lyricId = firstCandidate.getString("id");
+        String accesskey = firstCandidate.getString("accesskey");
+
+        // 3. 获取 KRC 歌词内容
+        String downloadUrl = UriComponentsBuilder
+                .fromHttpUrl("https://lyrics.kugou.com/download")
+                .queryParam("ver", "1")
+                .queryParam("client", "pc")
+                .queryParam("id", lyricId)
+                .queryParam("accesskey", accesskey)
+                .queryParam("fmt", "krc")
+                .queryParam("charset", "utf8")
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
+
+        String downloadRespStr = sendGetRequest(downloadUrl);
+
+        JSONObject downloadJsonObject = JSON.parseObject(downloadRespStr);
+
+        if (!downloadJsonObject.containsKey("error_code")) {
+            throw new RuntimeException("酷狗歌词获取失败（hash = " + this.fileHash + "）：响应结果不包含 error_code 字段");
+        }
+        int downloadErrCode = downloadJsonObject.getIntValue("error_code");
+        if (downloadErrCode != 0 && downloadErrCode != 200) {
+            throw new RuntimeException("酷狗歌词获取失败（hash = " + this.fileHash + "）：响应结果的 error_code 为 " + downloadErrCode);
+        }
+
+        String encryptedContent = downloadJsonObject.getString("content");
+        String decryptedLyric = Decrypter.decryptLyrics(encryptedContent);
+        if (!decryptedLyric.isBlank() && !hasInstrumentalHint(decryptedLyric)) {
+            lyric.setKaraokeLyric(decryptedLyric);
+            lyric.setHasKaraokeLyric(true);
+        }
+
+        // 4. 从 KRC 中提取 LRC 和翻译歌词
+        if (lyric.getHasKaraokeLyric()) {
+            Extractor.ExtractedKrc extracted = Extractor.extract(decryptedLyric);
+
+            String lrc = extracted.toLrc();
+            lyric.setLrc(lrc);
+            lyric.setHasLyric(true);
+
+            if (extracted.hasTranslation()) {
+                String translationLrc = extracted.toTranslationLrc();
+                lyric.setTranslatedLyric(translationLrc);
+                lyric.setHasTranslatedLyric(true);
+            }
+        }
+
+        if (lyric.getHasKaraokeLyric() || lyric.getHasLyric()) {
+            log.info("酷狗歌词获取成功（匹配度：{}%）", similarity);
+        } else {
+            log.info("酷狗歌词获取成功（匹配度：{}%，该歌曲无歌词）", similarity);
+        }
+
+        return lyric;
+    }
+
+    /**
+     * 判断歌词是否包含纯音乐提示
+     * @param krc KRC 歌词字符串
+     * @return 如果包含纯音乐提示则返回 true
+     */
+    private boolean hasInstrumentalHint(String krc) {
+        StringBuilder sb = new StringBuilder();
+        boolean inTag = false;
+        for (int i = 0; i < krc.length(); i++) {
+            char c = krc.charAt(i);
+            if (c == '<') inTag = true;
+            else if (c == '>') inTag = false;
+            else if (!inTag) sb.append(c);
+        }
+        return sb.indexOf("纯音乐，请欣赏") >= 0;
     }
 
     /**
