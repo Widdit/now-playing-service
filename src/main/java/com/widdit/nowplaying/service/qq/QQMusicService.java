@@ -20,6 +20,8 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -510,7 +512,10 @@ public class QQMusicService {
                     try {
                         String decompressText = Decrypter.decryptLyrics(text);
                         if (decompressText != null && !decompressText.isBlank()) {
-                            qrcLyric.setQrc(decompressText);
+                            String qrcContent = extractLyricContent(decompressText);
+                            if (qrcContent != null && !qrcContent.isBlank()) {
+                                qrcLyric.setQrc(qrcContent);
+                            }
                         }
                     } catch (Exception e) {
                         log.error("解密 QRC 歌词失败（id = {}）：{}", songid, e.getMessage());
@@ -535,6 +540,47 @@ public class QQMusicService {
             log.error("获取 QRC 逐字歌词失败（id = {}）：{}", songid, e.getMessage());
             return new QrcLyric();
         }
+    }
+
+    /**
+     * 从解密后的文本中提取实际的 QRC 歌词内容
+     * 如果解密后的文本是 XML 格式，则通过正则表达式直接提取 LyricContent 属性的原始值
+     * （避免通过 DOM 解析导致属性值中的换行符被规范化为空格），并对 XML 转义字符进行反转义；
+     * 否则直接返回原文本
+     *
+     * @param decompressText 解密后的文本
+     * @return 实际的 QRC 歌词字符串
+     */
+    private String extractLyricContent(String decompressText) {
+        if (decompressText.contains("<?xml")) {
+            try {
+                Pattern pattern = Pattern.compile("LyricContent=\"([\\s\\S]*?)\"\\s*/>");
+                Matcher matcher = pattern.matcher(decompressText);
+                if (matcher.find()) {
+                    return unescapeXml(matcher.group(1));
+                }
+                return decompressText;
+            } catch (Exception e) {
+                return decompressText;
+            }
+        } else {
+            return decompressText;
+        }
+    }
+
+    /**
+     * 反转义 XML 中的转义字符
+     *
+     * @param text 待反转义的文本
+     * @return 反转义后的文本
+     */
+    private String unescapeXml(String text) {
+        if (text == null) return null;
+        return text.replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&apos;", "'")
+                .replace("&amp;", "&");
     }
 
     /**
