@@ -8,7 +8,12 @@ import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
 import com.widdit.nowplaying.util.TimeUtil;
+import com.widdit.nowplaying.util.lyric.generator.LrcGenerator;
+import com.widdit.nowplaying.util.lyric.generator.LysGenerator;
+import com.widdit.nowplaying.util.lyric.model.LyricLine;
+import com.widdit.nowplaying.util.lyric.parser.KrcParser;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Service;
@@ -17,6 +22,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Objects;
 
 @Service
@@ -255,7 +261,7 @@ public class KuGouMusicService {
         String lyricId = firstCandidate.getString("id");
         String accesskey = firstCandidate.getString("accesskey");
 
-        // 3. 获取 KRC 歌词内容
+        // 3. 获取 KRC 歌词内容，并提取翻译歌词和 LRC 歌词
         String downloadUrl = UriComponentsBuilder
                 .fromHttpUrl("https://lyrics.kugou.com/download")
                 .queryParam("ver", "1")
@@ -281,24 +287,30 @@ public class KuGouMusicService {
         }
 
         String encryptedContent = downloadJsonObject.getString("content");
-        String decryptedLyric = Decrypter.decryptLyrics(encryptedContent);
-        if (!decryptedLyric.isBlank() && !hasInstrumentalHint(decryptedLyric)) {
-            lyric.setKaraokeLyric(decryptedLyric);
+        String krcContent = Decrypter.decryptLyrics(encryptedContent);
+
+        if (!StringUtils.isBlank(krcContent) && !hasInstrumentalHint(krcContent)) {
+            // 将 KRC 格式的逐字歌词解析为 List<LyricLine> 内部对象
+            List<LyricLine> lyricLines = KrcParser.parse(krcContent);
+
+            // 根据 List<LyricLine> 内部对象生成 LYS 格式的逐字歌词
+            String lys = LysGenerator.generate(lyricLines, "krc");
+
             lyric.setHasKaraokeLyric(true);
-        }
+            lyric.setKaraokeLyric(lys);
 
-        // 4. 从 KRC 中提取 LRC 和翻译歌词
-        if (lyric.getHasKaraokeLyric()) {
-            Extractor.ExtractedKrc extracted = Extractor.extract(decryptedLyric);
+            // 根据 List<LyricLine> 内部对象生成 LRC 歌词
+            String lrc = LrcGenerator.generate(lyricLines);
 
-            String lrc = extracted.toLrc();
-            lyric.setLrc(lrc);
             lyric.setHasLyric(true);
+            lyric.setLrc(lrc);
 
-            if (extracted.hasTranslation()) {
-                String translationLrc = extracted.toTranslationLrc();
-                lyric.setTranslatedLyric(translationLrc);
+            // 从 KRC 中提取翻译歌词，生成翻译歌词字符串（若无翻译则为 null）
+            String translationLrc = KrcParser.parseTranslationLrc(krcContent, lyricLines);
+
+            if (translationLrc != null && !translationLrc.isBlank()) {
                 lyric.setHasTranslatedLyric(true);
+                lyric.setTranslatedLyric(translationLrc);
             }
         }
 

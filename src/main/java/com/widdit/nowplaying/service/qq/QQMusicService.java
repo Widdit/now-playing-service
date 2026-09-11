@@ -8,6 +8,10 @@ import com.widdit.nowplaying.entity.Track;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
 import com.widdit.nowplaying.util.TimeUtil;
+import com.widdit.nowplaying.util.lyric.generator.LrcGenerator;
+import com.widdit.nowplaying.util.lyric.generator.LysGenerator;
+import com.widdit.nowplaying.util.lyric.model.LyricLine;
+import com.widdit.nowplaying.util.lyric.parser.QrcParser;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Connection;
@@ -18,6 +22,7 @@ import org.w3c.dom.Node;
 
 import java.net.URL;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -393,12 +398,25 @@ public class QQMusicService {
             return lyric;
         }
 
-        // 2. 获取逐字歌词与翻译歌词
+        // 2. 获取逐字歌词与翻译歌词，并根据 QRC 生成 LRC
         QrcLyric qrcLyric = getQrcLyric(id);
 
-        if (!StringUtils.isBlank(qrcLyric.getQrc())) {
+        String qrcContent = qrcLyric.getQrc();
+        if (!StringUtils.isBlank(qrcContent)) {
+            // 将 QRC 格式的逐字歌词解析为 List<LyricLine> 内部对象
+            List<LyricLine> lyricLines = QrcParser.parse(qrcContent);
+
+            // 根据 List<LyricLine> 内部对象生成 LYS 格式的逐字歌词
+            String lys = LysGenerator.generate(lyricLines, "qrc");
+
             lyric.setHasKaraokeLyric(true);
-            lyric.setKaraokeLyric(qrcLyric.getQrc());
+            lyric.setKaraokeLyric(lys);
+
+            // 根据 List<LyricLine> 内部对象生成 LRC 歌词
+            String lrc = LrcGenerator.generate(lyricLines);
+
+            lyric.setHasLyric(true);
+            lyric.setLrc(lrc);
         }
 
         if (!StringUtils.isBlank(qrcLyric.getTrans())) {
@@ -406,59 +424,61 @@ public class QQMusicService {
             lyric.setTranslatedLyric(qrcLyric.getTrans());
         }
 
-        // 3. 获取原始歌词
-        // 构建请求参数
-        Map<String, String> params = new HashMap<>();
-        params.put("musicid", id);
-        params.put("callback", "MusicJsonCallback_lrc");
-        params.put("pcachetime", String.valueOf(System.currentTimeMillis()));
-        params.put("g_tk", "5381");
-        params.put("jsonpCallback", "MusicJsonCallback_lrc");
-        params.put("loginUin", "0");
-        params.put("hostUin", "0");
-        params.put("format", "json");
-        params.put("inCharset", "utf8");
-        params.put("outCharset", "utf8");
-        params.put("notice", "0");
-        params.put("platform", "yqq");
-        params.put("needNewCode", "0");
-        params.put("nobase64", "1");
+        // 3. 只有当没有得到 LRC 时，才获取原始歌词（通常发生于该歌曲本身无逐字歌词）
+        if (!lyric.getHasLyric()) {
+            // 构建请求参数
+            Map<String, String> params = new HashMap<>();
+            params.put("musicid", id);
+            params.put("callback", "MusicJsonCallback_lrc");
+            params.put("pcachetime", String.valueOf(System.currentTimeMillis()));
+            params.put("g_tk", "5381");
+            params.put("jsonpCallback", "MusicJsonCallback_lrc");
+            params.put("loginUin", "0");
+            params.put("hostUin", "0");
+            params.put("format", "json");
+            params.put("inCharset", "utf8");
+            params.put("outCharset", "utf8");
+            params.put("notice", "0");
+            params.put("platform", "yqq");
+            params.put("needNewCode", "0");
+            params.put("nobase64", "1");
 
-        // 发送请求
-        String respStr = sendGetRequest("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg", params);
+            // 发送请求
+            String respStr = sendGetRequest("https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg", params);
 
-        // 解析 JSON 字符串为 JSONObject
-        JSONObject jsonObject = JSON.parseObject(respStr);
+            // 解析 JSON 字符串为 JSONObject
+            JSONObject jsonObject = JSON.parseObject(respStr);
 
-        // 检查响应数据的 code
-        if (!jsonObject.containsKey("code")) {
-            throw new RuntimeException("获取原始歌词失败（id = " + id + "）：响应结果不包含 code 字段");
-        }
-        int retCode = jsonObject.getIntValue("code");
-        if (retCode != 0 && retCode != -1901) {
-            throw new RuntimeException("获取原始歌词失败（id = " + id + "）：响应结果的 code 为 " + retCode);
-        }
-
-        // -1901 为一个特殊的 code，它并不代表 API 请求错误，而是 QQ 音乐没有歌词，因此需要特殊处理，不抛出异常
-        if (jsonObject.containsKey("lyric") && retCode != -1901) {
-            // 提取原始歌词
-            String lrc = jsonObject.getString("lyric");
-            if (lrc != null && !lrc.isBlank() && lrc.contains("00") && !lrc.contains("此歌曲为没有填词的纯音乐")) {
-                lyric.setHasLyric(true);
-                lyric.setLrc(lrc);
+            // 检查响应数据的 code
+            if (!jsonObject.containsKey("code")) {
+                throw new RuntimeException("获取原始歌词失败（id = " + id + "）：响应结果不包含 code 字段");
             }
-        }
+            int retCode = jsonObject.getIntValue("code");
+            if (retCode != 0 && retCode != -1901) {
+                throw new RuntimeException("获取原始歌词失败（id = " + id + "）：响应结果的 code 为 " + retCode);
+            }
 
-        // 提取翻译歌词（兼容处理）
-        // 说明：
-        // 1. 自 2026 年 3 月起，QQ 音乐该接口不再返回翻译歌词（可能是为了减少网络开销）
-        // 2. 多数歌曲已通过 QRC 歌词提供完整信息（含逐字 + 翻译）
-        // 3. 为兼容仍返回翻译歌词的情况，此处保留兜底判断
-        if (!lyric.getHasTranslatedLyric() && jsonObject.containsKey("trans")) {
-            String translatedLyric = jsonObject.getString("trans");
-            if (!StringUtils.isBlank(translatedLyric)) {
-                lyric.setHasTranslatedLyric(true);
-                lyric.setTranslatedLyric(translatedLyric);
+            // -1901 为一个特殊的 code，它并不代表 API 请求错误，而是 QQ 音乐没有歌词，因此需要特殊处理，不抛出异常
+            if (jsonObject.containsKey("lyric") && retCode != -1901) {
+                // 提取原始歌词
+                String lrc = jsonObject.getString("lyric");
+                if (lrc != null && !lrc.isBlank() && lrc.contains("00") && !lrc.contains("此歌曲为没有填词的纯音乐")) {
+                    lyric.setHasLyric(true);
+                    lyric.setLrc(lrc);
+                }
+            }
+
+            // 提取翻译歌词（兼容处理）
+            // 说明：
+            // 1. 自 2026 年 3 月起，QQ 音乐该接口不再返回翻译歌词（可能是为了减少网络开销）
+            // 2. 多数歌曲已通过 QRC 歌词提供完整信息（含逐字 + 翻译）
+            // 3. 为兼容仍返回翻译歌词的情况，此处保留兜底判断
+            if (!lyric.getHasTranslatedLyric() && jsonObject.containsKey("trans")) {
+                String translatedLyric = jsonObject.getString("trans");
+                if (!StringUtils.isBlank(translatedLyric)) {
+                    lyric.setHasTranslatedLyric(true);
+                    lyric.setTranslatedLyric(translatedLyric);
+                }
             }
         }
 

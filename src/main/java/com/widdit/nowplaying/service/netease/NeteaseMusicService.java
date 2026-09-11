@@ -8,6 +8,9 @@ import com.widdit.nowplaying.service.qq.QQMusicService;
 import com.widdit.nowplaying.util.SongMatchingUtil;
 import com.widdit.nowplaying.util.SongUtil;
 import com.widdit.nowplaying.util.TimeUtil;
+import com.widdit.nowplaying.util.lyric.generator.LysGenerator;
+import com.widdit.nowplaying.util.lyric.model.LyricLine;
+import com.widdit.nowplaying.util.lyric.parser.YrcParser;
 import lombok.extern.slf4j.Slf4j;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
@@ -21,6 +24,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -362,10 +366,16 @@ public class NeteaseMusicService {
 
         // 提取逐字歌词
         if (jsonObject.containsKey("yrc")) {
-            String karaokeLyric = jsonObject.getJSONObject("yrc").getString("lyric");
-            if (!StringUtils.isBlank(karaokeLyric)) {
+            String yrcContent = jsonObject.getJSONObject("yrc").getString("lyric");
+            if (!StringUtils.isBlank(yrcContent)) {
+                // 将 YRC 格式的逐字歌词解析为 List<LyricLine> 内部对象
+                List<LyricLine> lyricLines = YrcParser.parse(yrcContent);
+
+                // 根据 List<LyricLine> 内部对象生成 LYS 格式的逐字歌词
+                String lys = LysGenerator.generate(lyricLines, "yrc");
+
                 lyric.setHasKaraokeLyric(true);
-                lyric.setKaraokeLyric(karaokeLyric);
+                lyric.setKaraokeLyric(lys);
             }
         }
 
