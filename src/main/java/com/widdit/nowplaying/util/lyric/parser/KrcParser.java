@@ -1,9 +1,14 @@
 package com.widdit.nowplaying.util.lyric.parser;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import com.widdit.nowplaying.util.lyric.model.LyricLine;
 import com.widdit.nowplaying.util.lyric.model.LyricSyllable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -14,7 +19,7 @@ import java.util.regex.Pattern;
  * <p>krc 歌词内容通常由以下几种行组成：</p>
  * <ul>
  *     <li>元数据行：形如 [id:xxx]、[ar:xxx]、[ti:xxx]、[by:xxx]、[hash:xxx]、[al:xxx]、
- *     [sign:xxx]、[qq:xxx]、[total:xxx]、[offset:xxx]、[language:xxx]（Base64 编码的翻译数据）等，
+ *     [sign:xxx]、[qq:xxx]、[total:xxx]、[offset:xxx] 等，
  *     与逐字歌词内容无关，会被本解析器丢弃。</li>
  *     <li>歌词行：格式形如
  *     [行起始时间,行持续时长]&lt;音节相对起始时间,音节持续时长,标志位&gt;音节文字&lt;...&gt;音节文字...
@@ -22,8 +27,26 @@ import java.util.regex.Pattern;
  * </ul>
  *
  * <p>解析结果为 {@link LyricLine} 列表，每个 LyricLine 内部包含若干 {@link LyricSyllable}。</p>
+ *
+ * <p>此外，本解析器还支持从 krc 内容中的 [language:xxx] 行提取翻译歌词。该行内容为 Base64
+ * 编码的 JSON 数据，解码后形如：</p>
+ * <pre>
+ * {"content":[{"type":1,"language":0,"lyricContent":[["翻译文本1"],["翻译文本2"], ...]}],"version":1}
+ * </pre>
+ * <p>其中 lyricContent 数组与 krc 中的逐行歌词（含标题、作词等伪歌词行）一一对应，
+ * 若某行无翻译，则对应位置内容通常为空格或 "//"。</p>
  */
 public class KrcParser {
+
+    /**
+     * 每分钟对应的厘秒（centisecond，1/100 秒）数量。
+     */
+    private static final long CENTISECONDS_PER_MINUTE = 6000;
+
+    /**
+     * 每秒对应的厘秒数量。
+     */
+    private static final long CENTISECONDS_PER_SECOND = 100;
 
     /**
      * 匹配歌词行行首的 [lineStartTime,lineDuration]，并将剩余内容作为一个分组捕获，供后续解析音节使用。
@@ -36,6 +59,11 @@ public class KrcParser {
      * word 为从当前尖括号结束处到下一个 '&lt;' 之前的所有字符。
      */
     private static final Pattern SYLLABLE_PATTERN = Pattern.compile("<(\\d+),(\\d+),(\\d+)>([^<]*)");
+
+    /**
+     * 匹配 [language:xxx] 行，捕获其中 Base64 编码的翻译数据。
+     */
+    private static final Pattern LANGUAGE_PATTERN = Pattern.compile("\\[language:([^]]*)]");
 
     private KrcParser() {
         // 工具类，禁止实例化
@@ -132,5 +160,140 @@ public class KrcParser {
                 .duration(lineDuration)
                 .syllables(syllables)
                 .build();
+    }
+
+    /**
+     * 从 krc 内容中提取翻译歌词，并生成 LRC 格式的翻译歌词字符串。
+     *
+     * <p>翻译内容与 {@code lyricLines}（即 {@link #parse(String)} 的解析结果）按下标一一对应，
+     * 每一条翻译文本使用对应歌词行的起始时间作为时间戳。若某行没有翻译文本（内容为空白或 "//"），
+     * 该行会以空文本的形式保留，以维持与原始歌词行数一致。</p>
+     *
+     * @param krcContent krc 格式歌词原始文本
+     * @param lyricLines 通过 {@link #parse(String)} 解析得到的逐字歌词行列表，用于提供每行的起始时间
+     * @return LRC 格式的翻译歌词字符串；若 krc 中不包含翻译数据，或翻译数据为空，返回 null
+     */
+    public static String parseTranslationLrc(String krcContent, List<LyricLine> lyricLines) {
+        if (lyricLines == null || lyricLines.isEmpty()) {
+            return null;
+        }
+
+        List<String> translations = extractTranslationLines(krcContent);
+        if (translations == null || translations.isEmpty()) {
+            return null;
+        }
+
+        int count = Math.min(lyricLines.size(), translations.size());
+        StringBuilder lrcBuilder = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            String text = translations.get(i);
+            if (text == null) {
+                text = "";
+            }
+            text = text.trim();
+            // "//" 是酷狗翻译数据中用于表示无翻译内容的占位符
+            if ("//".equals(text)) {
+                text = "";
+            }
+            long startTime = lyricLines.get(i).getStartTime();
+            lrcBuilder.append(formatLrcTimeTag(startTime)).append(text).append('\n');
+        }
+
+        if (lrcBuilder.length() == 0) {
+            return null;
+        }
+        // 去除末尾多余的换行符
+        return lrcBuilder.substring(0, lrcBuilder.length() - 1);
+    }
+
+    /**
+     * 从 krc 内容中提取翻译歌词的原始文本列表（按行对应，未附加时间戳）。
+     *
+     * <p>krc 中的翻译数据位于 [language:xxx] 行，xxx 为 Base64 编码的 JSON 数据，解码后形如：</p>
+     * <pre>
+     * {"content":[{"type":1,"language":0,"lyricContent":[["翻译文本1"],["翻译文本2"], ...]}],"version":1}
+     * </pre>
+     *
+     * @param krcContent krc 格式歌词原始文本
+     * @return 翻译文本列表（与 krc 中歌词行按下标一一对应），若不存在翻译数据或解析失败，返回 null
+     */
+    private static List<String> extractTranslationLines(String krcContent) {
+        if (krcContent == null || krcContent.isEmpty()) {
+            return null;
+        }
+
+        Matcher languageMatcher = LANGUAGE_PATTERN.matcher(krcContent);
+        if (!languageMatcher.find()) {
+            return null;
+        }
+
+        String base64Language = languageMatcher.group(1);
+        if (base64Language == null || base64Language.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            byte[] decodedBytes = Base64.getDecoder().decode(base64Language.trim());
+            String json = new String(decodedBytes, StandardCharsets.UTF_8);
+
+            JSONObject root = JSON.parseObject(json);
+            if (root == null) {
+                return null;
+            }
+
+            JSONArray contentArray = root.getJSONArray("content");
+            if (contentArray == null || contentArray.isEmpty()) {
+                return null;
+            }
+
+            JSONObject translationObj = null;
+            for (int i = 0; i < contentArray.size(); i++) {
+                JSONObject item = contentArray.getJSONObject(i);
+                if (item != null && item.getIntValue("type") == 1) {
+                    translationObj = item;
+                    break;
+                }
+            }
+            if (translationObj == null) {
+                return null;
+            }
+
+            JSONArray lyricContentArray = translationObj.getJSONArray("lyricContent");
+            if (lyricContentArray == null || lyricContentArray.isEmpty()) {
+                return null;
+            }
+
+            List<String> translations = new ArrayList<>();
+            for (int i = 0; i < lyricContentArray.size(); i++) {
+                JSONArray lineArray = lyricContentArray.getJSONArray(i);
+                String text = "";
+                if (lineArray != null && !lineArray.isEmpty()) {
+                    String raw = lineArray.getString(0);
+                    text = raw == null ? "" : raw;
+                }
+                translations.add(text);
+            }
+            return translations;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 将毫秒时间戳格式化为 lrc 标准的 [mm:ss.xx] 格式（分:秒.厘秒，厘秒为两位数）。
+     *
+     * <p>该转换逻辑与 {@link com.widdit.nowplaying.util.lyric.generator.LrcGenerator} 保持一致，
+     * 均采用"先四舍五入为厘秒，再拆分为分、秒、厘秒"的方式，以保证同一时间点在原始 lrc 与
+     * 翻译 lrc 中生成完全相同的时间戳，避免出现两者时间戳不一致的问题。</p>
+     *
+     * @param startTimeMs 起始时间（毫秒）
+     * @return 形如 "[00:14.87]" 的时间戳字符串
+     */
+    private static String formatLrcTimeTag(long startTimeMs) {
+        long totalCentiseconds = Math.round(startTimeMs / 10.0);
+        long minutes = totalCentiseconds / CENTISECONDS_PER_MINUTE;
+        long seconds = (totalCentiseconds / CENTISECONDS_PER_SECOND) % 60;
+        long centiseconds = totalCentiseconds % CENTISECONDS_PER_SECOND;
+        return String.format("[%02d:%02d.%02d]", minutes, seconds, centiseconds);
     }
 }
