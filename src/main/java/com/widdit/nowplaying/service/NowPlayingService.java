@@ -317,6 +317,7 @@ public class NowPlayingService {
         otherPlatforms.put("youtube", "YouTube Music");
         otherPlatforms.put("miebo", "咩播");
         otherPlatforms.put("yesplay", "YesPlayMusic");
+        otherPlatforms.put("splayer-next", "SPlayer-Next");
         otherPlatforms.put("cider", "Cider");
         otherPlatforms.put("browser", "浏览器");
         otherPlatforms.put("salt", "Salt Player");

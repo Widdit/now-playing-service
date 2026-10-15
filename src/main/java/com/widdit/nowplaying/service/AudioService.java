@@ -102,6 +102,9 @@ public class AudioService {
         options.add(new Option("--platform", getCurrentPlatform()));
         options.add(new Option("--smtc", settingsGeneral.getSmtc().toString()));
         options.add(new Option("--poll-interval", settingsGeneral.getPollInterval().toString()));
+        if ("splayer-next".equals(getCurrentPlatform())) {
+            options.add(new Option("--splayer-next-port", settingsGeneral.getSplayerNextPort().toString()));
+        }
         Args args = new Args(options);
 
         List<String> command = ConsoleUtil.getCommand("Assets\\AudioService\\GetMusicStatus.exe", args);

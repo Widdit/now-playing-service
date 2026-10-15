@@ -17,6 +17,7 @@ using System.Threading;
         --device-id  音频设备 ID。仅检测该音频设备，默认值为 "default"，检测默认音频设备。
         --platform  音乐平台。期望检测的音乐软件平台，默认值为 "netease"，检测网易云音乐。
         --smtc  是否优先使用 SMTC。默认值为 true，优先通过 SMTC 识别歌曲信息。
+        --splayer-next-port  SPlayer-Next 本机 HTTP API 端口，默认 14558。
         --poll-interval  轮询间隔（ms）。建议取值范围为 100~1000 ms，默认值为 100 ms（最快）。
 */
 class Program
@@ -35,7 +36,7 @@ class Program
     // 用于创建通知客户端的设备枚举器。需在程序运行期间保持存活
     private static MMDeviceEnumerator notificationDeviceEnumerator;
 
-    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100)
+    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100, int splayerNextPort = 14558)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -53,6 +54,8 @@ class Program
         parentWatchThread.IsBackground = true;
         parentWatchThread.Start();
 
+        // HTTP 适配不依赖音频设备，即使没有输出设备也可以读取状态。
+        if (platform != "splayer-next")
         try
         {
             if (deviceId == "default")
@@ -97,6 +100,7 @@ class Program
             { "youtube", (smtc) => new YouTubeMusicSMTC() },
             { "miebo", (smtc) => new MieboService() },
             { "yesplay", (smtc) => new YesPlayMusicService() },
+            { "splayer-next", (smtc) => new SPlayerNextService(splayerNextPort) },
             { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
             { "wesing", (smtc) => new WeSingService() },
             { "browser", (smtc) => new BrowserSMTC() },

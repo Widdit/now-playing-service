@@ -306,6 +306,7 @@ public class CoverService {
             case "bq":
             case "youtube":
             case "miebo":
+            case "splayer-next":
             case "yesplay":
             case "browser":
             case "salt":
