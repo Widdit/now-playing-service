@@ -141,8 +141,9 @@ public class SpotifyMusicService : MusicService
         if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))
         {
             string[] split = windowTitle.Split('-');
-            windowTitle = split[1].Trim() + " - " + split[0].Trim().ToHansFromHant();
+            windowTitle = split[1].Trim() + " - " + split[0].Trim();
         }
+        windowTitle = windowTitle.ToHansFromHant();
 
         return windowTitle;
     }
