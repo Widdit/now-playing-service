@@ -1,7 +1,11 @@
 using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Text.Json;
 using WindowsMediaController;
 using CSCore.CoreAudioAPI;
 using OpenCCNET;
+using System.Linq;
 
 public class SpotifyMusicSMTC : MusicService
 {
@@ -10,6 +14,14 @@ public class SpotifyMusicSMTC : MusicService
     private string sessionId;
     private string prevTitle = "";
     private string prevArtist = "";
+    private List<Artist> artists;
+
+    // Json 序列化
+    public class Artist
+    {
+        public string artist_name { get; set; }
+        public string artist_zh_name { get; set; }
+    }
 
     public override void Init()
     {
@@ -17,6 +29,14 @@ public class SpotifyMusicSMTC : MusicService
 
         mediaManager.OnAnySessionOpened += MediaManager_OnAnySessionOpened;
         mediaManager.OnAnySessionClosed += MediaManager_OnAnySessionClosed;
+
+        string baseDir = AppContext.BaseDirectory;
+        string filePath = Path.Combine(baseDir, "artist.json");
+        if (File.Exists(filePath))
+        {
+            string jsonString = File.ReadAllText(filePath);
+            artists = JsonSerializer.Deserialize<List<Artist>>(jsonString);
+        }
 
         mediaManager.Start();
     }
@@ -71,6 +91,14 @@ public class SpotifyMusicSMTC : MusicService
                             return null;
                         }
                     });
+
+                    // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
+                    var exactMatch = artists.FirstOrDefault(a =>
+                        a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
+                    if (exactMatch != null)
+                    {
+                        artist = exactMatch.artist_zh_name;
+                    }
                 }
 
                 prevTitle = title;
