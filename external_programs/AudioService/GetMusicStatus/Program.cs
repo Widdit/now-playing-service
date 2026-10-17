@@ -4,7 +4,7 @@ using System.Diagnostics;
 using CSCore.CoreAudioAPI;
 using System.Collections.Generic;
 using System.Threading;
-using OpenCCNET;
+using System.IO;
 
 /*
     检测音乐软件的播放状态（Playing, Paused, None）、歌曲信息。
@@ -39,7 +39,6 @@ class Program
     static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100)
     {
         Console.OutputEncoding = Encoding.UTF8;
-        ZhConverter.Initialize();
 
         // 启动守护线程：当父进程退出（stdin 关闭）时，自动退出本进程
         var parentWatchThread = new Thread(() =>

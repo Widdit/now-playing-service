@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Text.Json;
 using WindowsMediaController;
 using CSCore.CoreAudioAPI;
-using OpenCCNET;
 using System.Linq;
 
 public class SpotifyMusicSMTC : MusicService
@@ -70,8 +69,8 @@ public class SpotifyMusicSMTC : MusicService
             var songInfo = mediaSession.ControlSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
             if (songInfo != null)
             {
-                title = songInfo.Title.ToHansFromHant();
-                artist = songInfo.Artist.ToHansFromHant();
+                title = songInfo.Title;
+                artist = songInfo.Artist;
                 // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
                 var exactMatch = artists.FirstOrDefault(a =>
                     a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
