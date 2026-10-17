@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Collections.Generic;
 using CSCore.CoreAudioAPI;
+using OpenCCNET;
 
 public class SpotifyMusicService : MusicService
 {
@@ -140,7 +141,7 @@ public class SpotifyMusicService : MusicService
         if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains('-'))
         {
             string[] split = windowTitle.Split('-');
-            windowTitle = split[1].Trim() + " - " + split[0].Trim();
+            windowTitle = split[1].Trim() + " - " + split[0].Trim().ToHansFromHant();
         }
 
         return windowTitle;
