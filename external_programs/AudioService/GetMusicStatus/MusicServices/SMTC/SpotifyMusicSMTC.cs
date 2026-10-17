@@ -1,6 +1,7 @@
 using System;
 using WindowsMediaController;
 using CSCore.CoreAudioAPI;
+using OpenCCNET;
 
 public class SpotifyMusicSMTC : MusicService
 {
@@ -49,8 +50,8 @@ public class SpotifyMusicSMTC : MusicService
             var songInfo = mediaSession.ControlSession.TryGetMediaPropertiesAsync().GetAwaiter().GetResult();
             if (songInfo != null)
             {
-                title = songInfo.Title;
-                artist = songInfo.Artist;
+                title = songInfo.Title.ToHansFromHant();
+                artist = songInfo.Artist.ToHansFromHant();
 
                 // 检测到切歌时，在后台重新拉取并校验封面，确认内容已更新后再保存。
                 // SMTC 的标题与封面由播放器异步上报，如果直接使用此刻的 songInfo.Thumbnail，
