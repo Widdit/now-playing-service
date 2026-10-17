@@ -72,6 +72,13 @@ public class SpotifyMusicSMTC : MusicService
             {
                 title = songInfo.Title.ToHansFromHant();
                 artist = songInfo.Artist.ToHansFromHant();
+                // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
+                var exactMatch = artists.FirstOrDefault(a =>
+                    a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
+                if (exactMatch != null)
+                {
+                    artist = exactMatch.artist_zh_name;
+                }
 
                 // 检测到切歌时，在后台重新拉取并校验封面，确认内容已更新后再保存。
                 // SMTC 的标题与封面由播放器异步上报，如果直接使用此刻的 songInfo.Thumbnail，
@@ -91,14 +98,6 @@ public class SpotifyMusicSMTC : MusicService
                             return null;
                         }
                     });
-
-                    // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
-                    var exactMatch = artists.FirstOrDefault(a =>
-                        a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
-                    if (exactMatch != null)
-                    {
-                        artist = exactMatch.artist_zh_name;
-                    }
                 }
 
                 prevTitle = title;
