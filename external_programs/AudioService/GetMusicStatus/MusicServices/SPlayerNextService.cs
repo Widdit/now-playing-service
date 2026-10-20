@@ -15,6 +15,11 @@ public class SPlayerNextService : MusicService
     private int failures;
     private string output = "None";
     private string coverKey;
+    // 切歌瞬间播放器 API 可能会短暂返回无曲目/非播放状态，
+    // 这里做去抖动：连续多次判定为 None 才真正切换为 None，
+    // 避免在两首歌之间输出一两帧虚假的 "None"。
+    private int noneStreak;
+    private const int NoneThreshold = 8;
 
     public SPlayerNextService(int port = 14558) : this(port, new HttpClientHandler { UseProxy = false }) { }
 
@@ -34,13 +39,24 @@ public class SPlayerNextService : MusicService
         {
             string json = client.GetStringAsync(endpoint).GetAwaiter().GetResult();
             var snapshot = JObject.Parse(json);
-            output = FormatSnapshot(snapshot);
-            if (output == "None")
+            string newOutput = FormatSnapshot(snapshot);
+            if (newOutput == "None")
             {
+                noneStreak = Math.Min(noneStreak + 1, NoneThreshold);
+                if (noneStreak < NoneThreshold)
+                {
+                    // 可能只是切歌瞬间的短暂空档，先保留上一次的有效输出，不对外暴露 None。
+                    failures = 0;
+                    nextPoll = clock.ElapsedMilliseconds + 250;
+                    return output;
+                }
+                output = "None";
                 ResetCover();
             }
             else
             {
+                noneStreak = 0;
+                output = newOutput;
                 var track = (JObject)snapshot["track"];
                 string key = $"{track["source"]}|{track["id"]}|{track["cover"]}";
                 if (coverKey != key)
@@ -55,6 +71,7 @@ public class SPlayerNextService : MusicService
         }
         catch (Exception ex)
         {
+            noneStreak = 0;
             output = "None";
             ResetCover();
             failures = Math.Min(failures + 1, 5);
@@ -101,6 +118,12 @@ public class SPlayerNextService : MusicService
 
     private void SaveCover(string url)
     {
+        if (string.IsNullOrEmpty(url)) return;
+        if (url.StartsWith("cache://", StringComparison.OrdinalIgnoreCase))
+        {
+            SaveLocalCover(url);
+            return;
+        }
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || (uri.Scheme != "http" && uri.Scheme != "https")) return;
         try
@@ -115,5 +138,38 @@ public class SPlayerNextService : MusicService
             finally { File.Delete("cover_base64.lock"); }
         }
         catch (Exception ex) { Console.Error.WriteLine($"SPlayer-Next cover unavailable: {ex.Message}"); }
+    }
+
+    // 处理 "cache://covers/xxx.jpg" 形式的本地封面，映射到
+    // %AppData%\SPlayer-Next\app-data\cache\covers\xxx.jpg
+    private void SaveLocalCover(string url)
+    {
+        try
+        {
+            string relative = url.Substring("cache://".Length).Replace('/', Path.DirectorySeparatorChar);
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string path = Path.Combine(appData, "SPlayer-Next", "app-data", "cache", relative);
+            if (!File.Exists(path)) return;
+            byte[] bytes = File.ReadAllBytes(path);
+            string mime = GetMimeType(path);
+            File.WriteAllText("cover_base64.lock", "");
+            try { File.WriteAllText("cover_base64.txt", $"data:{mime};base64,{Convert.ToBase64String(bytes)}"); }
+            finally { File.Delete("cover_base64.lock"); }
+        }
+        catch (Exception ex) { Console.Error.WriteLine($"SPlayer-Next local cover unavailable: {ex.Message}"); }
+    }
+
+    private static string GetMimeType(string path)
+    {
+        switch (Path.GetExtension(path).ToLowerInvariant())
+        {
+            case ".jpg":
+            case ".jpeg": return "image/jpeg";
+            case ".png": return "image/png";
+            case ".gif": return "image/gif";
+            case ".bmp": return "image/bmp";
+            case ".webp": return "image/webp";
+            default: return "application/octet-stream";
+        }
     }
 }
