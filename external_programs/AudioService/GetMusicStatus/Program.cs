@@ -18,7 +18,7 @@ using System.Threading;
         --platform  音乐平台。期望检测的音乐软件平台，默认值为 "netease"，检测网易云音乐。
         --smtc  是否优先使用 SMTC。默认值为 true，优先通过 SMTC 识别歌曲信息。
         --poll-interval  轮询间隔（ms）。建议取值范围为 100~1000 ms，默认值为 100 ms（最快）。
-        --splayer-next-port  SPlayer-Next 本机 HTTP API 端口，默认 14558。
+        --splayer-next-port  SPlayer-Next 本机 HTTP API 端口，默认值为 14558。
 */
 class Program
 {

@@ -6,7 +6,6 @@ using System.Net.Http;
 using CSCore.CoreAudioAPI;
 using Newtonsoft.Json.Linq;
 
-// 只读取元数据和进度；歌词仍由 Now Playing 原有逻辑处理。
 public class SPlayerNextService : MusicService
 {
     private readonly HttpClient client;

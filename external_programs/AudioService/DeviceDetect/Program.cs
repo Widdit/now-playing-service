@@ -10,23 +10,19 @@ class Program
     static string defaultDeviceId = null;
     static List<string> deviceIds = new List<string>();
 
+    // 以下平台检测不依赖音频会话，因此直接选用默认设备
+    static readonly HashSet<string> SkipPlatforms = new HashSet<string>
+    {
+        "ayna", "huahua", "bq", "miebo", "wesing", "browser", "salt", "splayer-next"
+    };
+
     static void Main(string platform = "netease")
     {
         Console.OutputEncoding = Encoding.UTF8;
 
         try
         {
-            // SPW 检测主要通过 SMTC，不依赖音频会话；部分设备上其音频会话也不会暴露有效 PeakValue。因此进程存在时直接选用默认设备
-            // https://github.com/Widdit/now-playing-service/pull/51
-            if ("salt".Equals(platform, StringComparison.OrdinalIgnoreCase)
-                && Process.GetProcessesByName("Salt Player for Windows").Length > 0)
-            {
-                Console.WriteLine("default");
-                return;
-            }
-
-            // 浏览器检测主要通过 SMTC，不依赖音频会话，因此直接选用默认设备
-            if ("browser".Equals(platform, StringComparison.OrdinalIgnoreCase))
+            if (SkipPlatforms.Contains(platform))
             {
                 Console.WriteLine("default");
                 return;
