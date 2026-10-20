@@ -322,7 +322,7 @@ public class NowPlayingService {
         otherPlatforms.put("salt", "Salt Player");
         otherPlatforms.put("splayer-next", "SPlayer-Next");
     }
-0
+
     /**
      * 处理 C# 端精确进度的更新（检测重唱、同名歌曲恢复、进度同步）
      * 适用于所有支持 C# 端精确进度的平台，对于不提供精确进度的平台会自动跳过
