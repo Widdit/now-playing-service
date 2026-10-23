@@ -309,6 +309,7 @@ public class CoverService {
             case "yesplay":
             case "browser":
             case "salt":
+            case "splayer-next":
                 return true;
 
             case "qq":

@@ -23,10 +23,11 @@ public static class Helper
         { "youtube", new[] { "youtube-music-desktop-app" } },
         { "miebo", new[] { "咩播", "miebo" } },
         { "yesplay", new[] { "yesplaymusic" } },
-        { "cider", new[] { "msedgewebview2" } },
+        { "cider", new[] { "msedgewebview2", "cider" } },
         { "wesing", new[] { "wesing" } },
         { "browser", new[] { "chrome", "msedge", "firefox" } },
-        { "salt", new[] { "salt player for windows" } }
+        { "salt", new[] { "salt player for windows" } },
+        { "splayer-next", new[] { "splayer-next" } },
     };
 
     public static bool IsMusicProcess(string processName, string platform)

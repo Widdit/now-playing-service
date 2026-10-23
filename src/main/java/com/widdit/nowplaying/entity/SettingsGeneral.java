@@ -44,4 +44,7 @@ public class SettingsGeneral {
     // 全民 K 歌缓存目录
     private String weSingCachePath = "";
 
+    // SPlayer-Next 本机 API 端口
+    private Integer splayerNextPort = 14558;
+
 }

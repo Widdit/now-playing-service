@@ -320,6 +320,7 @@ public class NowPlayingService {
         otherPlatforms.put("cider", "Cider");
         otherPlatforms.put("browser", "浏览器");
         otherPlatforms.put("salt", "Salt Player");
+        otherPlatforms.put("splayer-next", "SPlayer-Next");
     }
 
     /**

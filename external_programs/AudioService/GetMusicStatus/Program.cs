@@ -19,6 +19,7 @@ using System.IO;
         --platform  音乐平台。期望检测的音乐软件平台，默认值为 "netease"，检测网易云音乐。
         --smtc  是否优先使用 SMTC。默认值为 true，优先通过 SMTC 识别歌曲信息。
         --poll-interval  轮询间隔（ms）。建议取值范围为 100~1000 ms，默认值为 100 ms（最快）。
+        --splayer-next-port  SPlayer-Next 本机 HTTP API 端口，默认值为 14558。
 */
 class Program
 {
@@ -36,7 +37,7 @@ class Program
     // 用于创建通知客户端的设备枚举器。需在程序运行期间保持存活
     private static MMDeviceEnumerator notificationDeviceEnumerator;
 
-    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100)
+    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100, int splayerNextPort = 14558)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -101,7 +102,8 @@ class Program
             { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
             { "wesing", (smtc) => new WeSingService() },
             { "browser", (smtc) => new BrowserSMTC() },
-            { "salt", (smtc) => new SaltPlayerSMTC() }
+            { "salt", (smtc) => new SaltPlayerSMTC() },
+            { "splayer-next", (smtc) => new SPlayerNextService(splayerNextPort) }
         };
 
         MusicService musicService;
