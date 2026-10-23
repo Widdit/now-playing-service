@@ -4,6 +4,7 @@ using System.Diagnostics;
 using CSCore.CoreAudioAPI;
 using System.Collections.Generic;
 using System.Threading;
+using System.IO;
 
 /*
     检测音乐软件的播放状态（Playing, Paused, None）、歌曲信息。
@@ -122,7 +123,7 @@ class Program
 
         Stopwatch globalTimer = Stopwatch.StartNew();
         long lastHeartbeatTime = 0; // 记录上次心跳的时间点
-        
+
         // 不断轮询音乐状态
         while (true)
         {
@@ -134,7 +135,7 @@ class Program
 
             // 判断状态是否改变
             bool statusChanged = currentOutput != prevOutput;
-            
+
             // 计算当前时间与上次心跳时间的差值
             long currentTime = globalTimer.ElapsedMilliseconds;
             bool heartbeatDue = (currentTime - lastHeartbeatTime) >= HEARTBEAT_INTERVAL_MS;
@@ -147,7 +148,7 @@ class Program
 
                 if (heartbeatDue)
                 {
-                    lastHeartbeatTime = currentTime; 
+                    lastHeartbeatTime = currentTime;
                 }
             }
 
