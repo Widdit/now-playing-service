@@ -1,6 +1,7 @@
 using System;
 using WindowsMediaController;
 using CSCore.CoreAudioAPI;
+using Windows.Media.Control;
 
 public class SpotifyMusicSMTC : MusicService
 {
@@ -9,6 +10,8 @@ public class SpotifyMusicSMTC : MusicService
     private string sessionId;
     private string prevTitle = "";
     private string prevArtist = "";
+    // 最近一次切歌的时间，用来丢弃切歌瞬间仍属于上一首的时间轴
+    private DateTimeOffset trackChangedAt = DateTimeOffset.MinValue;
 
     public override void Init()
     {
@@ -38,6 +41,7 @@ public class SpotifyMusicSMTC : MusicService
         string status = null;
         string title = null;
         string artist = null;
+        string progress = null;
 
         try
         {
@@ -57,6 +61,7 @@ public class SpotifyMusicSMTC : MusicService
                 // 可能会拿到尚未刷新的旧封面，因此交由 UpdateThumbnailAsync 处理。
                 if (title != prevTitle || artist != prevArtist)
                 {
+                    trackChangedAt = DateTimeOffset.Now;
                     var controlSession = mediaSession.ControlSession;
                     ThumbnailHelper.UpdateThumbnailAsync(() =>
                     {
@@ -75,6 +80,8 @@ public class SpotifyMusicSMTC : MusicService
                 prevTitle = title;
                 prevArtist = artist;
             }
+
+            progress = GetProgress(mediaSession.ControlSession, status == "Playing");
         }
         catch (Exception)
         {
@@ -87,7 +94,51 @@ public class SpotifyMusicSMTC : MusicService
         }
 
         // 输出结果
-        return $"{status}\r\n{title + " - " + artist}";
+        return progress == null
+            ? $"{status}\r\n{title + " - " + artist}"
+            : $"{status}\r\n{title + " - " + artist}\r\n{progress}";
+    }
+
+    /// <summary>
+    /// 从 SMTC 时间轴读取 Spotify 的真实进度，返回 "Progress:当前秒|总秒"，读不到时返回 null。
+    ///
+    /// Spotify 在播放中约每 4.5 秒、以及拖动进度条、切歌、暂停时更新一次时间轴（Position + LastUpdatedTime），
+    /// 两次更新之间按 LastUpdatedTime 往后推算。这样拖动进度条后 1 秒内就能把新进度交给服务端，
+    /// 服务端据此校准计时器并推送进度同步（与网易云的 UI Automation 进度共用同一条通道）。
+    /// </summary>
+    private string GetProgress(GlobalSystemMediaTransportControlsSession controlSession, bool audible)
+    {
+        try
+        {
+            var timeline = controlSession.GetTimelineProperties();
+            double totalSec = timeline.EndTime.TotalSeconds;
+            if (totalSec <= 0)
+            {
+                return null;
+            }
+
+            // 切歌后 Spotify 会很快重新上报时间轴；在那之前读到的仍是上一首的进度，不能输出
+            if (timeline.LastUpdatedTime.AddSeconds(1) < trackChangedAt)
+            {
+                return null;
+            }
+
+            // 音量判断在安静段落会误判为暂停，所以只要 SMTC 或音量任一认为在播放，就继续推算
+            bool playing = audible
+                || controlSession.GetPlaybackInfo()?.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
+            double currentSec = timeline.Position.TotalSeconds;
+            if (playing)
+            {
+                currentSec += (DateTimeOffset.Now - timeline.LastUpdatedTime).TotalSeconds;
+            }
+            currentSec = Math.Max(0, Math.Min(totalSec, currentSec));
+
+            return $"Progress:{(int)currentSec}|{(int)Math.Round(totalSec)}";
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void MediaManager_OnAnySessionOpened(MediaManager.MediaSession session)
