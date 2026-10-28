@@ -1,6 +1,10 @@
 using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Text.Json;
 using WindowsMediaController;
 using CSCore.CoreAudioAPI;
+using System.Linq;
 using Windows.Media.Control;
 
 public class SpotifyMusicSMTC : MusicService
@@ -10,6 +14,14 @@ public class SpotifyMusicSMTC : MusicService
     private string sessionId;
     private string prevTitle = "";
     private string prevArtist = "";
+    private List<Artist> artists;
+
+    // Json 序列化
+    public class Artist
+    {
+        public string artist_name { get; set; }
+        public string artist_zh_name { get; set; }
+    }
     // 最近一次切歌的时间，用来丢弃切歌瞬间仍属于上一首的时间轴
     private DateTimeOffset trackChangedAt = DateTimeOffset.MinValue;
 
@@ -19,6 +31,14 @@ public class SpotifyMusicSMTC : MusicService
 
         mediaManager.OnAnySessionOpened += MediaManager_OnAnySessionOpened;
         mediaManager.OnAnySessionClosed += MediaManager_OnAnySessionClosed;
+
+        string baseDir = AppContext.BaseDirectory;
+        string filePath = Path.Combine(baseDir, "artist.json");
+        if (File.Exists(filePath))
+        {
+            string jsonString = File.ReadAllText(filePath);
+            artists = JsonSerializer.Deserialize<List<Artist>>(jsonString);
+        }
 
         mediaManager.Start();
     }
@@ -55,6 +75,13 @@ public class SpotifyMusicSMTC : MusicService
             {
                 title = songInfo.Title;
                 artist = songInfo.Artist;
+                // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
+                var exactMatch = artists.FirstOrDefault(a =>
+                    a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
+                if (exactMatch != null)
+                {
+                    artist = exactMatch.artist_zh_name;
+                }
 
                 // 检测到切歌时，在后台重新拉取并校验封面，确认内容已更新后再保存。
                 // SMTC 的标题与封面由播放器异步上报，如果直接使用此刻的 songInfo.Thumbnail，
