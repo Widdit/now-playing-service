@@ -68,71 +68,279 @@
     "artist_zh_name": "杨宗纬"
   },
   {
-      "artist_name": "Hebe Tien",
-      "artist_zh_name": "田馥甄"
+    "artist_name": "Hebe Tien",
+    "artist_zh_name": "田馥甄"
   },
   {
-      "artist_name": "Fish Leong",
-      "artist_zh_name": "梁静茹"
+    "artist_name": "Fish Leong",
+    "artist_zh_name": "梁静茹"
   },
   {
-      "artist_name": "WeiBird",
-      "artist_zh_name": "韦礼安"
+    "artist_name": "WeiBird",
+    "artist_zh_name": "韦礼安"
   },
   {
-      "artist_name": "Eric Chou",
-      "artist_zh_name": "周兴哲"
+    "artist_name": "Eric Chou",
+    "artist_zh_name": "周兴哲"
   },
   {
-      "artist_name": "David Tao",
-      "artist_zh_name": "陶喆"
+    "artist_name": "David Tao",
+    "artist_zh_name": "陶喆"
   },
   {
-        "artist_name": "Mayday",
-        "artist_zh_name": "五月天"
+    "artist_name": "Mayday",
+    "artist_zh_name": "五月天"
   },
   {
-        "artist_name": "Hu Xia",
-        "artist_zh_name": "胡夏"
+    "artist_name": "Hu Xia",
+    "artist_zh_name": "胡夏"
   },
   {
-        "artist_name": "Lara Liang",
-        "artist_zh_name": "梁心颐"
+    "artist_name": "Lara Liang",
+    "artist_zh_name": "梁心颐"
   },
   {
-        "artist_name": "Jam Hsiao",
-        "artist_zh_name": "萧敬腾"
+    "artist_name": "Jam Hsiao",
+    "artist_zh_name": "萧敬腾"
   },
   {
-        "artist_name": "Andrew Tan",
-        "artist_zh_name": "陈势安"
+    "artist_name": "Andrew Tan",
+    "artist_zh_name": "陈势安"
   },
   {
-        "artist_name": "Gary Yang",
-        "artist_zh_name": "杨瑞代"
+    "artist_name": "Gary Yang",
+    "artist_zh_name": "杨瑞代"
   },
   {
-        "artist_name": "Zhang Bichen",
-        "artist_zh_name": "张碧晨"
+    "artist_name": "Zhang Bichen",
+    "artist_zh_name": "张碧晨"
   },
   {
-        "artist_name": "Mao Buyi",
-        "artist_zh_name": "毛不易"
+    "artist_name": "Mao Buyi",
+    "artist_zh_name": "毛不易"
   },
   {
-        "artist_name": "Yisa Yu",
-        "artist_zh_name": "郁可唯"
+    "artist_name": "Yisa Yu",
+    "artist_zh_name": "郁可唯"
   },
   {
-        "artist_name": "Steve Chou",
-        "artist_zh_name": "周传雄"
+    "artist_name": "Steve Chou",
+    "artist_zh_name": "周传雄"
   },
   {
-        "artist_name": "Jia Jia",
-        "artist_zh_name": "家家"
+    "artist_name": "Jia Jia",
+    "artist_zh_name": "家家"
   },
   {
-        "artist_name": "Tiger Hu",
-        "artist_zh_name": "胡彦斌"
+    "artist_name": "Tiger Hu",
+    "artist_zh_name": "胡彦斌"
+  },
+  {
+    "artist_name": "Zhou Shen",
+    "artist_zh_name": "周深"
+  },
+  {
+    "artist_name": "Evangeline Wong",
+    "artist_zh_name": "王艳薇"
+  },
+  {
+    "artist_name": "LaLa Hsu",
+    "artist_zh_name": "徐佳莹"
+  },
+  {
+    "artist_name": "A-Lin",
+    "artist_zh_name": "黄丽玲"
+  },
+  {
+    "artist_name": "Firdhaus",
+    "artist_zh_name": "菲道尔"
+  },
+  {
+    "artist_name": "F.I.R.",
+    "artist_zh_name": "F.I.R.飞儿乐团"
+  },
+  {
+    "artist_name": "Li Yugang",
+    "artist_zh_name": "李玉刚"
+  },
+  {
+    "artist_name": "A-Mei Chang",
+    "artist_zh_name": "张惠妹"
+  },
+  {
+    "artist_name": "Kimberley Chen",
+    "artist_zh_name": "陈芳语"
+  },
+  {
+    "artist_name": "Crowd Lu",
+    "artist_zh_name": "卢广仲"
+  },
+  {
+    "artist_name": "Jason Zhang",
+    "artist_zh_name": "张杰"
+  },
+  {
+    "artist_name": "Kelly Yu",
+    "artist_zh_name": "于文文"
+  },
+  {
+    "artist_name": "Jane Zhang",
+    "artist_zh_name": "张靓颖"
+  },
+  {
+    "artist_name": "Valen Hsu",
+    "artist_zh_name": "许茹芸"
+  },
+  {
+    "artist_name": "Phil Chang",
+    "artist_zh_name": "张宇"
+  },
+  {
+    "artist_name": "Jin Hai Xing",
+    "artist_zh_name": "金海心"
+  },
+  {
+    "artist_name": "Sam Lee",
+    "artist_zh_name": "李圣杰"
+  },
+  {
+    "artist_name": "Sandy Lam",
+    "artist_zh_name": "林忆莲"
+  },
+  {
+    "artist_name": "Gary Chaw",
+    "artist_zh_name": "曹格"
+  },
+  {
+    "artist_name": "Michael Wong",
+    "artist_zh_name": "光良"
+  },
+  {
+    "artist_name": "Faye Wong",
+    "artist_zh_name": "王菲"
+  },
+  {
+    "artist_name": "Chen Li",
+    "artist_zh_name": "陈粒"
+  },
+  {
+    "artist_name": "ChoCo",
+    "artist_zh_name": "刘佳至"
+  },
+  {
+    "artist_name": "Claire Kuo",
+    "artist_zh_name": "郭静"
+  },
+  {
+    "artist_name": "Della",
+    "artist_zh_name": "丁当"
+  },
+  {
+    "artist_name": "Della Wu",
+    "artist_zh_name": "丁当"
+  },
+  {
+    "artist_name": "Guo Ding",
+    "artist_zh_name": "郭顶"
+  },
+  {
+    "artist_name": "Guo Yu",
+    "artist_zh_name": "于果"
+  },
+  {
+    "artist_name": "Hu Ge",
+    "artist_zh_name": "胡歌"
+  },
+  {
+    "artist_name": "Hua Chenyu",
+    "artist_zh_name": "华晨宇"
+  },
+  {
+    "artist_name": "HuaTong",
+    "artist_zh_name": "花僮"
+  },
+  {
+    "artist_name": "Huazhou",
+    "artist_zh_name": "花粥"
+  },
+  {
+    "artist_name": "Jeff Chang",
+    "artist_zh_name": "张信哲"
+  },
+  {
+    "artist_name": "Jin Wenqi",
+    "artist_zh_name": "金玟岐"
+  },
+  {
+    "artist_name": "Karen Mok",
+    "artist_zh_name": "莫文蔚"
+  },
+  {
+    "artist_name": "Li Chang Chao",
+    "artist_zh_name": "李常超（Lao乾妈）"
+  },
+  {
+    "artist_name": "Li Ronghao",
+    "artist_zh_name": "李荣浩"
+  },
+  {
+    "artist_name": "Liu Zhe",
+    "artist_zh_name": "六哲"
+  },
+  {
+    "artist_name": "Mao Bu Yi",
+    "artist_zh_name": "毛不易"
+  },
+  {
+    "artist_name": "Miya",
+    "artist_zh_name": "梦然"
+  },
+  {
+    "artist_name": "Nan Si",
+    "artist_zh_name": "司南"
+  },
+  {
+    "artist_name": "Phoenix Legend",
+    "artist_zh_name": "凤凰传奇"
+  },
+  {
+    "artist_name": "Pu Shu",
+    "artist_zh_name": "朴树"
+  },
+  {
+    "artist_name": "Rene Liu",
+    "artist_zh_name": "刘若英"
+  },
+  {
+    "artist_name": "Renran",
+    "artist_zh_name": "任然"
+  },
+  {
+    "artist_name": "Sa Ding Ding",
+    "artist_zh_name": "萨顶顶"
+  },
+  {
+    "artist_name": "Sa Dingding",
+    "artist_zh_name": "萨顶顶"
+  },
+  {
+    "artist_name": "Silk Ye",
+    "artist_zh_name": "七叔（叶泽浩）"
+  },
+  {
+    "artist_name": "Vae Xu",
+    "artist_zh_name": "许嵩"
+  },
+  {
+    "artist_name": "Wang Jingwen",
+    "artist_zh_name": "王靖雯"
+  },
+  {
+    "artist_name": "Yanzi Sun",
+    "artist_zh_name": "孙燕姿"
+  },
+  {
+    "artist_name": "Zhang Yuan",
+    "artist_zh_name": "张远"
   }
 ]

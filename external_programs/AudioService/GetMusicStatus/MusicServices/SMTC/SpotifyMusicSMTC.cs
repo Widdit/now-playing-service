@@ -14,6 +14,7 @@ public class SpotifyMusicSMTC : MusicService
     private string sessionId;
     private string prevTitle = "";
     private string prevArtist = "";
+    private string zhArtist = "";
     private List<Artist> artists;
 
     // Json 序列化
@@ -75,13 +76,6 @@ public class SpotifyMusicSMTC : MusicService
             {
                 title = songInfo.Title;
                 artist = songInfo.Artist;
-                // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
-                var exactMatch = artists.FirstOrDefault(a =>
-                    a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
-                if (exactMatch != null)
-                {
-                    artist = exactMatch.artist_zh_name;
-                }
 
                 // 检测到切歌时，在后台重新拉取并校验封面，确认内容已更新后再保存。
                 // SMTC 的标题与封面由播放器异步上报，如果直接使用此刻的 songInfo.Thumbnail，
@@ -89,6 +83,17 @@ public class SpotifyMusicSMTC : MusicService
                 if (title != prevTitle || artist != prevArtist)
                 {
                     trackChangedAt = DateTimeOffset.Now;
+
+                    // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
+                    var exactMatch = artists.FirstOrDefault(a =>
+                        a.artist_name.Equals(artist, StringComparison.OrdinalIgnoreCase));
+                    if (exactMatch != null)
+                    {
+                        zhArtist = exactMatch.artist_zh_name;
+                    } else {
+                        zhArtist = artist;
+                    }
+
                     var controlSession = mediaSession.ControlSession;
                     ThumbnailHelper.UpdateThumbnailAsync(() =>
                     {
@@ -122,8 +127,8 @@ public class SpotifyMusicSMTC : MusicService
 
         // 输出结果
         return progress == null
-            ? $"{status}\r\n{title + " - " + artist}"
-            : $"{status}\r\n{title + " - " + artist}\r\n{progress}";
+            ? $"{status}\r\n{title + " - " + zhArtist}"
+            : $"{status}\r\n{title + " - " + zhArtist}\r\n{progress}";
     }
 
     /// <summary>
