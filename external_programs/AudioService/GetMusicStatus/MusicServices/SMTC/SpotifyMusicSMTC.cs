@@ -1,3 +1,4 @@
+
 using System;
 using System.IO;
 using System.Collections.Generic;
@@ -15,7 +16,7 @@ public class SpotifyMusicSMTC : MusicService
     private string prevTitle = "";
     private string prevArtist = "";
     private string zhArtist = "";
-    private List<Artist> artists;
+    private List<Artist> artists = new List<Artist>();
 
     // 用于 JSON 序列化
     public class Artist
@@ -34,11 +35,10 @@ public class SpotifyMusicSMTC : MusicService
         mediaManager.OnAnySessionOpened += MediaManager_OnAnySessionOpened;
         mediaManager.OnAnySessionClosed += MediaManager_OnAnySessionClosed;
 
-        string baseDir = AppContext.BaseDirectory;
-        string filePath = Path.Combine(baseDir, "spotify_artists_zh.json");
-        if (File.Exists(filePath))
+        string artistsFilePath = "spotify_artists_zh.json";
+        if (File.Exists(artistsFilePath))
         {
-            string jsonString = File.ReadAllText(filePath);
+            string jsonString = File.ReadAllText(artistsFilePath);
             artists = JsonSerializer.Deserialize<List<Artist>>(jsonString);
         }
 
@@ -87,7 +87,7 @@ public class SpotifyMusicSMTC : MusicService
 
                     // 透过英文名进行匹配替换以解决 Spotify 某些歌曲元数据只有英文名的情况
                     var exactMatch = artists.FirstOrDefault(a =>
-                        a.artistName.Equals(artist, StringComparison.OrdinalIgnoreCase));
+                        a.artistName != null && a.artistName.Equals(artist, StringComparison.OrdinalIgnoreCase));
                     if (exactMatch != null)
                     {
                         zhArtist = exactMatch.artistNameZh;
@@ -120,6 +120,7 @@ public class SpotifyMusicSMTC : MusicService
         {
             return "None";
         }
+
 
         if (string.IsNullOrEmpty(title))
         {
