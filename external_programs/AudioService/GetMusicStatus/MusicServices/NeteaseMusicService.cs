@@ -26,35 +26,31 @@ public class NeteaseMusicService : MusicService
             sessionEnumerator = sessionManager.GetSessionEnumerator();
 
             // 遍历所有会话，寻找匹配的进程
-            foreach (AudioSessionControl session in sessionEnumerator)
+            foreach (AudioSessionControl audioSession in sessionEnumerator)
             {
+                using var session = audioSession;
                 if (session == null)
                 {
                     continue;
                 }
 
-                AudioSessionControl2 sessionControl = session.QueryInterface<AudioSessionControl2>();
-                if (sessionControl == null || sessionControl.Process == null)
+                using var sessionControl = session.QueryInterface<AudioSessionControl2>();
+                using var process = sessionControl?.Process;
+                if (process == null)
                 {
                     continue;
                 }
 
-                string processName = sessionControl.Process.ProcessName;
-                AudioMeterInformation meter = null;
+                string processName = process.ProcessName;
 
                 if (processName.Contains("cloudmusic") || processName.Contains("CloudMusic"))
                 {
 					// 网易云音乐会存在多个进程，因此不能 break，并且需要累加音量
                     musicAppRunning = true;
-                    meter = session.QueryInterface<AudioMeterInformation>();
+                    using var meter = session.QueryInterface<AudioMeterInformation>();
                     volume += meter.PeakValue;
-                    windowTitle = WindowDetector.GetWindowTitleByHandle(sessionControl.Process.MainWindowHandle);
+                    windowTitle = WindowDetector.GetWindowTitleByHandle(process.MainWindowHandle);
                 }
-
-                // 释放对象
-                meter?.Dispose();
-                sessionControl?.Dispose();
-                session.Dispose();
             }
         }
         catch (Exception)
