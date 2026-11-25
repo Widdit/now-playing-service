@@ -36,7 +36,8 @@ class Program
     // 用于创建通知客户端的设备枚举器。需在程序运行期间保持存活
     private static MMDeviceEnumerator notificationDeviceEnumerator;
 
-    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true, int pollInterval = 100, int splayerNextPort = 14558)
+    static void Main(string deviceId = "default", string platform = "netease", bool smtc = true,
+        int pollInterval = 100, int splayerNextPort = 14558, string yesPlayMode = "legacy", int yesPlayMcpPort = 18888)
     {
         Console.OutputEncoding = Encoding.UTF8;
 
@@ -54,29 +55,9 @@ class Program
         parentWatchThread.IsBackground = true;
         parentWatchThread.Start();
 
-        try
-        {
-            if (deviceId == "default")
-            {
-                // 获取默认设备的音频会话管理器
-                currentSessionManager = GetDefaultAudioSessionManager2(DataFlow.Render);
-
-                // 监听系统默认输出设备的变更事件，以便在用户切换设备（如扬声器切换为耳机）时，自动更新音频会话管理器
-                notificationDeviceEnumerator = new MMDeviceEnumerator();
-                notificationClient = new MMNotificationClient(notificationDeviceEnumerator);
-                notificationClient.DefaultDeviceChanged += OnDefaultDeviceChanged;
-            }
-            else
-            {
-                // 获取指定设备的音频会话管理器
-                currentSessionManager = GetAudioSessionManager2(deviceId);
-            }
-        }
-        catch (Exception)
-        {
-            Console.WriteLine($"Failed to get AudioSessionManager. Device ID: {deviceId}");
+        bool needsAudioDevice = platform != "yesplay" || (yesPlayMode == "legacy" && !smtc);
+        if (needsAudioDevice && !InitializeAudioDevice(deviceId))
             return;
-        }
 
         var musicServiceMap = new Dictionary<string, Func<bool, MusicService>>()
         {
@@ -97,7 +78,7 @@ class Program
             { "aimp", (smtc) => smtc ? new AIMPSMTC() : new AIMPService() },
             { "youtube", (smtc) => new YouTubeMusicSMTC() },
             { "miebo", (smtc) => new MieboService() },
-            { "yesplay", (smtc) => new YesPlayMusicService() },
+            { "yesplay", (smtc) => CreateYesPlayService(yesPlayMode, yesPlayMcpPort, smtc) },
             { "cider", (smtc) => smtc ? new CiderSMTC() : new CiderService() },
             { "wesing", (smtc) => new WeSingService() },
             { "browser", (smtc) => new BrowserSMTC() },
@@ -155,6 +136,30 @@ class Program
         }
     }
 
+    private static bool InitializeAudioDevice(string deviceId)
+    {
+        try
+        {
+            if (deviceId == "default")
+            {
+                currentSessionManager = GetDefaultAudioSessionManager2(DataFlow.Render);
+                notificationDeviceEnumerator = new MMDeviceEnumerator();
+                notificationClient = new MMNotificationClient(notificationDeviceEnumerator);
+                notificationClient.DefaultDeviceChanged += OnDefaultDeviceChanged;
+            }
+            else
+            {
+                currentSessionManager = GetAudioSessionManager2(deviceId);
+            }
+            return true;
+        }
+        catch (Exception)
+        {
+            Console.WriteLine($"Failed to get AudioSessionManager. Device ID: {deviceId}");
+            return false;
+        }
+    }
+
     /*
         默认音频设备变更事件的回调方法，运行在音频引擎的通知线程上。
         仅关心输出设备（Render）在 Multimedia 角色下的变化，其余情况直接忽略。
@@ -194,9 +199,15 @@ class Program
         }
     }
 
-    /*
-        获取默认音频设备的音频会话管理器
-    */
+    private static MusicService CreateYesPlayService(string mode, int port, bool smtc) => mode switch
+    {
+        "legacy" when smtc => new YesPlayMusicSMTC(),
+        "legacy" => new YesPlayMusicService(),
+        "mcp" when port >= 1024 && port <= 65535 => new YesPlayMcpService(
+            new YesPlayMcpClient(port, Environment.GetEnvironmentVariable("NOWPLAYING_YESPLAY_MCP_TOKEN"))),
+        _ => throw new ArgumentException("Invalid YesPlayMusic mode or MCP port.")
+    };
+
     static AudioSessionManager2 GetDefaultAudioSessionManager2(DataFlow dataFlow)
     {
         using (var enumerator = new MMDeviceEnumerator())

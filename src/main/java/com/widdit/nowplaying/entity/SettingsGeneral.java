@@ -47,4 +47,33 @@ public class SettingsGeneral {
     // SPlayer-Next 本机 API 端口
     private Integer splayerNextPort = 14558;
 
+    public static final String YESPLAY_LEGACY = "legacy";
+    public static final String YESPLAY_MCP = "mcp";
+    public static final int YESPLAY_DEFAULT_PORT = 18888;
+
+    private String yesPlayMode;
+    private Integer yesPlayMcpPort;
+
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
+    @lombok.ToString.Exclude
+    private String yesPlayMcpToken;
+
+    public String getYesPlayMode() {
+        return yesPlayMode == null ? YESPLAY_LEGACY : yesPlayMode;
+    }
+
+    public Integer getYesPlayMcpPort() {
+        return yesPlayMcpPort == null ? YESPLAY_DEFAULT_PORT : yesPlayMcpPort;
+    }
+
+    @com.alibaba.fastjson.annotation.JSONField(serialize = false, deserialize = false)
+    public boolean isYesPlayMcpTokenConfigured() {
+        return yesPlayMcpToken != null && !yesPlayMcpToken.isEmpty();
+    }
+
+    public void retainOmittedYesPlaySettings(SettingsGeneral previous) {
+        if (yesPlayMode == null) yesPlayMode = previous.getYesPlayMode();
+        if (yesPlayMcpPort == null) yesPlayMcpPort = previous.getYesPlayMcpPort();
+        if (yesPlayMcpToken == null) yesPlayMcpToken = previous.getYesPlayMcpToken();
+    }
 }
