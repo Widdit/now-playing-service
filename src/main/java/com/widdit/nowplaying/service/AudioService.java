@@ -99,10 +99,17 @@ public class AudioService {
 
         List<Option> options = new ArrayList<>();
         options.add(new Option("--device-id", settingsGeneral.getDeviceId()));
-        options.add(new Option("--platform", getCurrentPlatform()));
+        String platform = getCurrentPlatform();
+        options.add(new Option("--platform", platform));
         options.add(new Option("--smtc", settingsGeneral.getSmtc().toString()));
         options.add(new Option("--poll-interval", settingsGeneral.getPollInterval().toString()));
         options.add(new Option("--splayer-next-port", settingsGeneral.getSplayerNextPort().toString()));
+        boolean useYesPlayMcp = "yesplay".equals(platform)
+                && SettingsGeneral.YESPLAY_MCP.equals(settingsGeneral.getYesPlayMode());
+        if (useYesPlayMcp) {
+            options.add(new Option("--yes-play-mode", SettingsGeneral.YESPLAY_MCP));
+            options.add(new Option("--yes-play-mcp-port", settingsGeneral.getYesPlayMcpPort().toString()));
+        }
         Args args = new Args(options);
 
         List<String> command = ConsoleUtil.getCommand("Assets\\AudioService\\GetMusicStatus.exe", args);
@@ -112,6 +119,11 @@ public class AudioService {
             // 启动 C# 程序
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             processBuilder.directory(new File("Assets"));  // 指定工作目录为 Assets
+            if (useYesPlayMcp) {
+                String token = settingsGeneral.getYesPlayMcpToken();
+                processBuilder.environment().put("NOWPLAYING_YESPLAY_MCP_TOKEN", token == null ? "" : token);
+                processBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+            }
             getMusicStatusProcess = processBuilder.start();
 
             // 为了防止并发问题，在 Hook 内部使用局部变量捕获当前的进程对象

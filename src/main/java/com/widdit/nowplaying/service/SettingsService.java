@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.FileWriter;
 import java.nio.file.Files;
@@ -42,7 +44,8 @@ public class SettingsService {
      * 更新通用设置对象
      * @return
      */
-    public void updateSettingsGeneral(SettingsGeneral settings) {
+    public synchronized void updateSettingsGeneral(SettingsGeneral settings) {
+        mergeYesPlaySettings(settings, settingsGeneral);
         settingsGeneral = settings;
 
         writeSettings(settingsGeneral);
@@ -51,6 +54,18 @@ public class SettingsService {
 
         // 发布事件，通知变化
         eventPublisher.publishEvent(new SettingsGeneralChangedEvent(this, "通用设置被修改"));
+    }
+
+    static void mergeYesPlaySettings(SettingsGeneral settings, SettingsGeneral previous) {
+        settings.retainOmittedYesPlaySettings(previous);
+        String mode = settings.getYesPlayMode();
+        int port = settings.getYesPlayMcpPort();
+        String token = settings.getYesPlayMcpToken();
+        if ((!SettingsGeneral.YESPLAY_LEGACY.equals(mode) && !SettingsGeneral.YESPLAY_MCP.equals(mode))
+                || port < 1024 || port > 65535
+                || (token != null && !token.isEmpty() && !token.matches("[A-Za-z0-9._~+/\\-]+=*"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无效的 YesPlayMusic 读取方式、端口或 Token");
+        }
     }
 
     /**
