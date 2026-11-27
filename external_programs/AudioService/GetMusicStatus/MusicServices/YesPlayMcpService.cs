@@ -68,7 +68,7 @@ internal sealed class YesPlayMcpService : MusicService
             if (!JToken.DeepEquals(track, artwork.Track))
                 artworkTrack = null;
             else if (artwork.Image != null)
-                YesPlayCover.Write(artwork.Image);
+                YesPlayCover.Write(artwork.Image, artwork.MimeType);
         }
         catch (Exception error) when (error is HttpRequestException or TaskCanceledException
                                      or InvalidOperationException or JsonException or FormatException)

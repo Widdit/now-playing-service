@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -13,6 +14,7 @@ internal sealed class YesPlayMcpClient
     private const string SessionHeader = "Mcp-Session-Id";
     private const string NowPlayingUri = "ypm://now-playing";
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ArtworkTimeout = TimeSpan.FromSeconds(4);
     private readonly HttpClient http;
     private readonly Uri endpoint;
     private string sessionId;
@@ -24,7 +26,7 @@ internal sealed class YesPlayMcpClient
         endpoint = new Uri($"http://127.0.0.1:{port}/mcp");
         http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
         {
-            Timeout = RequestTimeout
+            Timeout = Timeout.InfiniteTimeSpan
         };
         http.DefaultRequestHeaders.Accept.ParseAdd("application/json, text/event-stream");
         if (!string.IsNullOrEmpty(token))
@@ -45,9 +47,13 @@ internal sealed class YesPlayMcpClient
         return JObject.Parse(text);
     }
 
-    internal (JToken Track, byte[] Image) ReadArtwork()
+    internal (JToken Track, byte[] Image, string MimeType) ReadArtwork()
     {
-        var result = Call("tools/call", new { name = "get_now_playing", arguments = new { } });
+        var result = Call("tools/call", new
+        {
+            name = "get_now_playing",
+            arguments = new { includeArtwork = true }
+        }, timeout: ArtworkTimeout);
         var content = result?["content"] as JArray;
         var text = (string)content?.FirstOrDefault(item => (string)item["type"] == "text")?["text"];
         if ((bool?)result?["isError"] == true || text == null)
@@ -57,9 +63,10 @@ internal sealed class YesPlayMcpClient
         if (snapshot["artworkError"] != null)
             Console.Error.WriteLine("[YesPlayMusic MCP] 播放器无法读取当前封面");
         var image = content.FirstOrDefault(item => (string)item["type"] == "image" &&
-            (string)item["mimeType"] == "image/png");
+            (string)item["mimeType"] is "image/jpeg" or "image/png");
         var base64 = (string)image?["data"];
-        return (snapshot["track"], base64 == null ? null : Convert.FromBase64String(base64));
+        return (snapshot["track"], string.IsNullOrEmpty(base64) ? null : Convert.FromBase64String(base64),
+            (string)image?["mimeType"]);
     }
 
     private void Initialize()
@@ -80,7 +87,7 @@ internal sealed class YesPlayMcpClient
         protocolVersion = ProtocolVersion;
     }
 
-    private JToken Call(string method, object parameters, bool notification = false)
+    private JToken Call(string method, object parameters, bool notification = false, TimeSpan? timeout = null)
     {
         var payload = new JObject
         {
@@ -98,7 +105,8 @@ internal sealed class YesPlayMcpClient
         if (method != "initialize")
             request.Headers.Add("MCP-Protocol-Version", ProtocolVersion);
 
-        using var response = http.SendAsync(request).GetAwaiter().GetResult();
+        using var cancellation = new CancellationTokenSource(timeout ?? RequestTimeout);
+        using var response = http.SendAsync(request, cancellation.Token).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound && sessionId != null)
             ResetSession();
         response.EnsureSuccessStatusCode();
